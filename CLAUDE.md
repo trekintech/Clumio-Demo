@@ -74,6 +74,8 @@ goes on stage; do not assume the verified DynamoDB claim extends to S3.
 - `validation.js` — the rule that decides whether an order is corrupt. Shared
   between the server and the verify script so the dashboard and the terminal
   can never disagree. If pricing logic changes, change this too.
+- `scripts/setup.js` — preflight check (Node version, AWS CLI, credentials,
+  bucket name) plus `npm install`. Doesn't touch AWS itself.
 - `scripts/seed.js` — creates table and bucket, loads tenants, enables PITR.
 - `scripts/bad-deploy.js` — corrupts three tenant partitions and writes
   `incident.json` with the exact timestamp and partition keys to feed into

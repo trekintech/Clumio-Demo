@@ -18,16 +18,23 @@ application, not a product demo.
 ## Setup
 
 ```bash
-npm install
 export AWS_PROFILE=kerbside-demo
 export AWS_REGION=eu-west-2
 export KERBSIDE_BUCKET=kerbside-demo-assets-<something-unique>
+npm run setup
 npm run seed
 npm start
 ```
 
 Bucket names are globally unique, so change `KERBSIDE_BUCKET` to something that
 is yours. Then open http://localhost:5173.
+
+`npm run setup` installs dependencies and checks the things that actually
+break a live session — Node version, that the AWS CLI is installed, that
+your credentials resolve (`aws sts get-caller-identity`), and that you
+changed `KERBSIDE_BUCKET` off the default. It exits non-zero and tells you
+exactly what to fix if anything's wrong, rather than letting you discover it
+mid-`npm run seed`. Safe to re-run any time — it doesn't touch AWS itself.
 
 `npm run seed` creates the DynamoDB table and the S3 bucket if they do not
 exist, then seeds two tiers of tenant:

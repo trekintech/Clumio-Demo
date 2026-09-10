@@ -6,6 +6,7 @@
   "description": "Multi-tenant ordering platform demo app for Clumio recovery scenarios",
   "scripts": {
     "start": "node server.js",
+    "setup": "node scripts/setup.js",
     "seed": "node scripts/seed.js",
     "bad-deploy": "node scripts/bad-deploy.js",
     "s3-delete-incident": "node scripts/s3-delete-incident.js",
