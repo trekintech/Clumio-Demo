@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kerbside — operations</title>
+<style>
+  :root {
+    --ink: #141b2d;
+    --ink-2: #4a5468;
+    --muted: #8590a3;
+    --line: #e7eaf0;
+    --page: #f6f7f9;
+    --rail: #171f33;
+    --rail-2: #232d47;
+    --bad: #cf3535;
+    --bad-bg: #fdeded;
+    --bad-line: #f6c9c9;
+    --ok: #10855f;
+    --ok-bg: #e7f6ef;
+    --warn: #9a6400;
+    --warn-bg: #fdf3e0;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--page);
+    color: var(--ink);
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+    display: grid;
+    grid-template-columns: 268px 1fr;
+    min-height: 100vh;
+  }
+
+  aside { background: var(--rail); color: #fff; padding: 22px 0 26px; display: flex; flex-direction: column; }
+  .brand { padding: 0 22px 22px; display: flex; align-items: center; gap: 11px; }
+  .mark { width: 30px; height: 30px; border-radius: 8px; background: #3d7dff; display: grid; place-items: center; font-weight: 700; font-size: 15px; }
+  .brand b { font-size: 17px; letter-spacing: -0.2px; font-weight: 600; }
+  .rail-label { padding: 0 22px 9px; font-size: 11px; letter-spacing: 0.9px; text-transform: uppercase; color: #7e8aa5; font-weight: 600; }
+  .rail-scroll { overflow-y: auto; flex: 1; }
+  .tenant {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 9px 22px; background: none; border: 0; cursor: pointer;
+    color: #c7cee0; font-size: 14.5px; text-align: left; font-family: inherit;
+  }
+  .tenant:hover { background: var(--rail-2); color: #fff; }
+  .tenant[aria-current="true"] { background: var(--rail-2); color: #fff; font-weight: 600; box-shadow: inset 3px 0 0 #3d7dff; }
+  .pip { width: 7px; height: 7px; border-radius: 50%; background: #3fbf8f; flex: none; }
+  .pip.bad { background: #ff6b6b; }
+  .pip.unknown { background: #55617d; }
+  .rail-foot { padding: 15px 22px 0; font-size: 12px; color: #6d798f; line-height: 1.7; border-top: 1px solid #26304a; margin-top: 10px; }
+  .rail-foot code { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: #93a0ba; }
+
+  main { padding: 0 0 60px; overflow-x: hidden; }
+  .topbar {
+    background: #fff; border-bottom: 1px solid var(--line);
+    padding: 17px 32px; display: flex; align-items: baseline; gap: 14px;
+  }
+  .topbar h1 { font-size: 21px; margin: 0; font-weight: 600; letter-spacing: -0.3px; }
+  .topbar .sub { font-size: 13.5px; color: var(--muted); }
+  .live { margin-left: auto; font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+  .beat { width: 7px; height: 7px; border-radius: 50%; background: #3fbf8f; }
+  .beat.stale { background: #d9a441; }
+  .beat.dead { background: #cf3535; }
+  .wrap { padding: 24px 32px; max-width: 1240px; }
+
+  .banner {
+    border-radius: 10px; padding: 14px 17px; margin-bottom: 22px;
+    display: flex; align-items: flex-start; gap: 12px; font-size: 14.5px;
+    border: 1px solid transparent;
+  }
+  .banner .t { font-weight: 600; display: block; margin-bottom: 2px; }
+  .banner .d { opacity: 0.85; font-size: 13.5px; }
+  .banner.ok { background: var(--ok-bg); color: var(--ok); border-color: #bfe6d5; }
+  .banner.bad { background: var(--bad-bg); color: var(--bad); border-color: var(--bad-line); }
+  .banner.warn { background: var(--warn-bg); color: var(--warn); border-color: #f0d9a8; }
+  .banner .icon { font-size: 16px; line-height: 1.4; font-weight: 700; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }
+  .stat { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 15px 17px; }
+  .stat .label { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px; font-weight: 700; }
+  .stat .value { font-size: 31px; font-weight: 600; margin-top: 7px; letter-spacing: -0.8px; font-variant-numeric: tabular-nums; }
+  .stat .value.bad { color: var(--bad); }
+  .stat .value.ok { color: var(--ok); }
+  .stat .foot { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--muted); margin: 0 0 13px; font-weight: 700; }
+  .section { margin-bottom: 32px; }
+
+  .gallery { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
+  .tile { background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .tile img { width: 100%; height: 132px; object-fit: cover; display: block; background: #eef0f4; }
+  .tile .gone {
+    height: 132px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px; background: repeating-linear-gradient(45deg,#f4f5f7,#f4f5f7 9px,#eceef2 9px,#eceef2 18px);
+    color: #a3abb9; font-size: 11.5px; font-family: ui-monospace, Menlo, monospace;
+  }
+  .tile .gone .big { font-size: 20px; color: #bcc3cf; }
+  .tile .cap { padding: 11px 13px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .tile .cap .n { font-size: 14px; font-weight: 500; }
+  .tile .cap .p { font-size: 13.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+  .panel { background: #fff; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.7px; color: var(--muted); font-weight: 700; padding: 12px 17px; background: #fbfbfc; border-bottom: 1px solid var(--line); }
+  td { padding: 12px 17px; border-bottom: 1px solid #f2f3f6; }
+  tr:last-child td { border-bottom: none; }
+  tr.bad td { background: var(--bad-bg); }
+  tr.bad td:first-child { box-shadow: inset 3px 0 0 var(--bad); }
+  .oid { font-family: ui-monospace, Menlo, monospace; font-size: 13px; color: var(--ink-2); }
+  .money { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .money.bad { color: var(--bad); }
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; background: #eef0f4; color: var(--ink-2); }
+  .pill.flag { background: #f9dede; color: var(--bad); }
+  .dim { color: var(--muted); }
+
+  .diag { background: #fff; border: 1px solid var(--bad-line); border-radius: 12px; padding: 24px 26px; }
+  .diag h3 { margin: 0 0 9px; font-size: 18px; color: var(--bad); font-weight: 600; }
+  .diag p { margin: 0 0 15px; color: var(--ink-2); font-size: 14.5px; line-height: 1.65; }
+  .diag pre { background: #f6f7f9; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 12.5px; overflow-x: auto; margin: 0 0 15px; white-space: pre-wrap; }
+  .diag ul { margin: 0; padding-left: 20px; color: var(--ink-2); font-size: 14.5px; line-height: 1.9; }
+  .diag code { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: #f1f2f5; padding: 1px 5px; border-radius: 4px; }
+  .hide { display: none !important; }
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand"><div class="mark">K</div><b>Kerbside</b></div>
+  <div class="rail-label">Tenants</div>
+  <div class="rail-scroll" id="rail"></div>
+  <div class="rail-foot">
+    Showing <b id="shown">0</b> of <b>4,127</b> tenants<br>
+    <code id="pk">—</code>
+  </div>
+</aside>
+<main>
+  <div class="topbar">
+    <h1 id="tname">Loading</h1>
+    <span class="sub" id="tsub"></span>
+    <span class="live"><span class="beat" id="beat"></span><span id="lastseen">connecting</span></span>
+  </div>
+  <div class="wrap">
+    <div id="diag" class="diag hide"></div>
+    <div id="app">
+      <div id="banner" class="banner ok"><span class="icon">•</span><span><span class="t">Checking order validation</span><span class="d">Reading from DynamoDB</span></span></div>
+      <div class="stats">
+        <div class="stat"><div class="label">Orders today</div><div class="value" id="s-total">—</div><div class="foot" id="f-total">&nbsp;</div></div>
+        <div class="stat"><div class="label">Failing validation</div><div class="value" id="s-bad">—</div><div class="foot" id="f-bad">&nbsp;</div></div>
+        <div class="stat"><div class="label">Menu assets</div><div class="value" id="s-assets">—</div><div class="foot" id="f-assets">&nbsp;</div></div>
+        <div class="stat"><div class="label">Gross value</div><div class="value" id="s-value">—</div><div class="foot" id="f-value">&nbsp;</div></div>
+      </div>
+      <div class="section">
+        <h2>Menu</h2>
+        <div class="gallery" id="gallery"></div>
+      </div>
+      <div class="section">
+        <h2>Recent orders</h2>
+        <div class="panel">
+          <table>
+            <thead><tr><th>Order</th><th>Item</th><th>Modifiers</th><th>Status</th><th class="money">Total</th></tr></thead>
+            <tbody id="orders"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

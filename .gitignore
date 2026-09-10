@@ -1,0 +1,8 @@
+node_modules/
+incident.json
+.env
+.env.*
+*.pem
+*.log
+.DS_Store
+recordings/

@@ -1,0 +1,25 @@
+{
+  "name": "kerbside-ops",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Multi-tenant ordering platform demo app for Clumio recovery scenarios",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node scripts/seed.js",
+    "bad-deploy": "node scripts/bad-deploy.js",
+    "s3-incident": "node scripts/s3-incident.js",
+    "verify": "node scripts/verify.js",
+    "teardown": "node scripts/teardown.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.658.0",
+    "@aws-sdk/client-s3": "^3.658.0",
+    "@aws-sdk/lib-dynamodb": "^3.658.0",
+    "@aws-sdk/s3-request-presigner": "^3.658.0",
+    "express": "^4.21.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
