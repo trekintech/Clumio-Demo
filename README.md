@@ -30,9 +30,28 @@ Bucket names are globally unique, so change `KERBSIDE_BUCKET` to something that
 is yours. Then open http://localhost:5173.
 
 `npm run seed` creates the DynamoDB table and the S3 bucket if they do not
-exist, loads eight tenants with 150 orders each, uploads menu artwork and a
-settlement CSV per tenant, and enables DynamoDB point-in-time recovery so you
-have the native comparison available if challenged from the floor.
+exist, then seeds two tiers of tenant:
+
+- 8 named tenants with 150 orders each, menu artwork and a settlement CSV —
+  these are the only tenants that ever appear on camera.
+- `SYNTHETIC_TENANT_COUNT` filler tenants (default 4,119, so 4,127 total)
+  with a name and orders only — no menu, no artwork, no S3 objects. They
+  exist purely so the tenant dropdown reads as a real multi-tenant estate
+  instead of eight rows. See `CLAUDE.md` → Scale for why.
+
+It also enables DynamoDB point-in-time recovery so you have the native
+comparison available if challenged from the floor.
+
+Seeding the full default estate writes roughly 314,000 DynamoDB items and
+takes a few minutes (batched, concurrent writes — progress is logged). While
+testing, seed a small synthetic count instead:
+
+```bash
+SYNTHETIC_TENANT_COUNT=50 npm run seed
+```
+
+Whatever count you seed with, start the server with the same value set — the
+dropdown and the table will disagree otherwise.
 
 No credentials are read from or written to this repo. Everything comes from
 your AWS CLI profile.
@@ -44,8 +63,12 @@ your AWS CLI profile.
 | `AWS_REGION` | `eu-west-2` | Region for both services |
 | `KERBSIDE_TABLE` | `kerbside-app` | DynamoDB table name |
 | `KERBSIDE_BUCKET` | `kerbside-demo-assets` | S3 bucket name |
-| `ORDERS_PER_TENANT` | `150` | Orders generated per tenant at seed time |
+| `ORDERS_PER_TENANT` | `150` | Orders generated per named tenant at seed time |
+| `SYNTHETIC_TENANT_COUNT` | `4119` | Filler tenants generated in addition to the 8 named ones |
+| `SYNTHETIC_ORDERS_PER_TENANT` | `75` | Orders generated per synthetic tenant |
+| `SEED_CONCURRENCY` | `24` | Concurrent batched writes during seeding |
 | `PORT` | `5173` | Local web server port |
+| `IMAGE_BASE_URL` | unset | CloudFront distribution domain for menu images; unset falls back to presigned S3 URLs read directly from the bucket |
 
 Tenants, menus and the blast radius are defined in `config.js`.
 
@@ -81,15 +104,25 @@ you want to have run before you stand up in front of partners.
 
 ### S3 scenario
 
+Two separate incidents, two separate recovery mechanisms — see
+`docs/s3-demo-runbook.md` for the full procedure, the CloudFront origin
+group console steps, and the cache-TTL warning. Summary:
+
 ```bash
-npm run s3-incident
+npm run s3-delete-incident   # availability: deletes objects, CloudFront fails over
+npm run s3-corrupt-incident  # data: overwrites objects in place, failover does NOT fire
 ```
 
-Deletes menu artwork and settlement exports for the same three tenants. The
-gallery renders `404 — object not found` tiles rather than an error banner,
-because that is what a real broken storefront looks like.
+`s3-delete-incident` removes menu artwork and settlement exports for the
+same three tenants. Reading direct from S3 (`IMAGE_BASE_URL` unset), the
+gallery renders `404 — object not found` tiles. Reading through the
+CloudFront origin group, it should keep working unattended — that's the
+clip. Recovery is restoring the source objects; the origin group returns to
+primary automatically.
 
-Recover from Clumio, then refresh.
+`s3-corrupt-incident` overwrites the same menu artwork in place with visibly
+wrong content — S3 still returns 200, so CloudFront failover never
+triggers. Recovery is the previous object version, not Instant Access.
 
 ## Recording
 
@@ -142,5 +175,9 @@ repo deliberately ships no destructive teardown script.
   `validation.js` too or the two will disagree.
 - The seed enables PITR on the table. That is useful for the native comparison
   but does add cost; disable it after the event.
-- Menu artwork is generated SVG, not photography. It records well enough at
-  1080p, but swap in real images if you want the gallery to look richer.
+- Menu artwork is generated SVG (hand-drawn per-dish icons, not photography —
+  see `DISH_ICONS` in `scripts/seed.js`). It records well enough at 1080p,
+  but swap in real photography if you want the gallery to look richer.
+- The seed enables S3 bucket versioning so `s3-corrupt-incident` has a
+  previous version to roll back to. Old versions of overwritten objects stay
+  in the bucket until you clean them up.

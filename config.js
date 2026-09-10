@@ -3,7 +3,15 @@ export const TABLE = process.env.KERBSIDE_TABLE || "kerbside-app";
 export const BUCKET = process.env.KERBSIDE_BUCKET || "kerbside-demo-assets";
 export const PORT = Number(process.env.PORT || 5173);
 
-export const TENANTS = [
+// Unset (default): server builds presigned S3 URLs directly, checks the
+// bucket for object existence, and the app renders 404 tiles for anything
+// missing. Set to a CloudFront distribution domain once the origin group
+// (source bucket primary, Clumio Instant Access secondary) exists in the
+// console — see docs/s3-demo-runbook.md. In that mode the app trusts
+// CloudFront completely and does not peek at the source bucket.
+export const IMAGE_BASE_URL = process.env.IMAGE_BASE_URL || null;
+
+const NAMED_TENANTS = [
   { slug: "alma-kitchen", name: "Alma Kitchen", cuisine: "Japanese" },
   { slug: "brick-lane-grill", name: "Brick Lane Grill", cuisine: "Turkish" },
   { slug: "corner-pantry", name: "Corner Pantry", cuisine: "Cafe" },
@@ -15,6 +23,46 @@ export const TENANTS = [
 ];
 
 export const BLAST_RADIUS = ["alma-kitchen", "brick-lane-grill", "corner-pantry"];
+
+// See CLAUDE.md "Scale". The stage narrative is "three tenants corrupted out
+// of four thousand" — the default here (4,119) plus the 8 named tenants
+// above equals 4,127, matching the count already in public/index.html.
+// Synthetic tenants exist only to make the dropdown read as a real estate;
+// they get a name and orders and nothing else (see scripts/seed.js).
+export const SYNTHETIC_TENANT_COUNT = Number(process.env.SYNTHETIC_TENANT_COUNT ?? 4119);
+
+const SYNTHETIC_PREFIXES = [
+  "Riverside", "Harbourside", "Northgate", "Kings Cross", "Ashfield", "Millbank",
+  "Sunnyside", "Cedar Grove", "Lansdowne", "Fenchurch", "Westgate", "Old Mill",
+  "Stonebridge", "Maple", "Queensway", "Abbeyfield", "Brookside", "Crown",
+  "Eastfield", "Hollow Lane"
+];
+const SYNTHETIC_SUFFIXES = [
+  "Kitchen", "Diner", "Grill", "Cafe", "Eatery", "Canteen", "Deli", "Bistro",
+  "Takeaway", "Kitchen & Bar"
+];
+const SYNTHETIC_CUISINES = [
+  "Cafe", "Italian", "Indian", "Chinese", "Mexican", "Thai", "British", "Vegan",
+  "Bakery", "Pizza"
+];
+
+function syntheticTenants(count) {
+  const out = [];
+  for (let i = 1; i <= count; i++) {
+    const num = String(i).padStart(5, "0");
+    const prefix = SYNTHETIC_PREFIXES[i % SYNTHETIC_PREFIXES.length];
+    const suffix = SYNTHETIC_SUFFIXES[Math.floor(i / SYNTHETIC_PREFIXES.length) % SYNTHETIC_SUFFIXES.length];
+    out.push({
+      slug: `synth-${num}`,
+      name: `${prefix} ${suffix} #${num}`,
+      cuisine: SYNTHETIC_CUISINES[i % SYNTHETIC_CUISINES.length],
+      synthetic: true
+    });
+  }
+  return out;
+}
+
+export const TENANTS = [...NAMED_TENANTS, ...syntheticTenants(SYNTHETIC_TENANT_COUNT)];
 
 export const MENU = {
   "alma-kitchen": [

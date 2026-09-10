@@ -36,7 +36,11 @@ async function main() {
   let anyBad = false;
   let collateral = false;
 
-  for (const t of TENANTS) {
+  // Only the named tenants carry menus/assets worth auditing — the synthetic
+  // filler (see CLAUDE.md "Scale") has no S3 objects and is never part of
+  // the blast radius, so looping over all of it here would turn this
+  // filmed, on-stage step into a multi-minute scan for no reason.
+  for (const t of TENANTS.filter((t) => !t.synthetic)) {
     const r = await auditTenant(t.slug);
     const inBlast = BLAST_RADIUS.includes(t.slug);
     const healthy = r.bad === 0 && r.assets > 0;

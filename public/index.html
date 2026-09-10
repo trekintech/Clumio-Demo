@@ -35,7 +35,7 @@
     min-height: 100vh;
   }
 
-  aside { background: var(--rail); color: #fff; padding: 22px 0 26px; display: flex; flex-direction: column; }
+  aside { position: sticky; top: 0; height: 100vh; background: var(--rail); color: #fff; padding: 22px 0 26px; display: flex; flex-direction: column; }
   .brand { padding: 0 22px 22px; display: flex; align-items: center; gap: 11px; }
   .mark { width: 30px; height: 30px; border-radius: 8px; background: #3d7dff; display: grid; place-items: center; font-weight: 700; font-size: 15px; }
   .brand b { font-size: 17px; letter-spacing: -0.2px; font-weight: 600; }
@@ -132,7 +132,7 @@
   <div class="rail-label">Tenants</div>
   <div class="rail-scroll" id="rail"></div>
   <div class="rail-foot">
-    Showing <b id="shown">0</b> of <b>4,127</b> tenants<br>
+    Showing <b id="shown">0</b> of <b id="total">0</b> tenants<br>
     <code id="pk">—</code>
   </div>
 </aside>

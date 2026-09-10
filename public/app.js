@@ -301,6 +301,7 @@ async function boot() {
     const data = await res.json();
     tenants = data.tenants;
     current = tenants[0].slug;
+    el("total").textContent = tenants.length.toLocaleString("en-GB");
     renderRail();
     await refresh();
   } catch (err) {

@@ -8,7 +8,8 @@
     "start": "node server.js",
     "seed": "node scripts/seed.js",
     "bad-deploy": "node scripts/bad-deploy.js",
-    "s3-incident": "node scripts/s3-incident.js",
+    "s3-delete-incident": "node scripts/s3-delete-incident.js",
+    "s3-corrupt-incident": "node scripts/s3-corrupt-incident.js",
     "verify": "node scripts/verify.js",
     "teardown": "node scripts/teardown.js"
   },
