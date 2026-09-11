@@ -27,10 +27,17 @@ const ok = (m) => console.log(`  ${M.ok} ${m}`);
 const bad = (m) => console.log(`  ${M.bad} ${m}`);
 const info = (m) => console.log(`     ${m}`);
 
-const idx = process.argv.indexOf("--confirm");
-const confirmed = idx !== -1 ? process.argv[idx + 1] : null;
-const keepBucket = process.argv.includes("--keep-bucket");
-const keepTable = process.argv.includes("--keep-table");
+// Confirmation is "the bucket name appears in the arguments", in any form.
+// It deliberately does not require a --confirm flag: `npm run teardown --
+// --confirm <name>` on Windows PowerShell drops the flag and forwards only
+// the value, so a flag-based check silently never fires. Matching on the name
+// itself works the same whichever way the arguments survive the shell, and
+// typing the exact name is the safety catch regardless.
+const args = process.argv.slice(2);
+const confirmed = args.includes(BUCKET);
+const nameLike = args.find((a) => !a.startsWith("-") && a !== BUCKET);
+const keepBucket = args.includes("--keep-bucket");
+const keepTable = args.includes("--keep-table");
 
 const absent = (err) =>
   err.name === "ResourceNotFoundException" ||
@@ -87,14 +94,14 @@ if (!tableExists && !bucketExists) {
 
 // --------------------------------------------------------------- dry run
 
-if (confirmed !== BUCKET) {
+if (!confirmed) {
   console.log("\nThis is a dry run. Nothing has been deleted.\n");
-  if (confirmed) {
-    bad(`"${confirmed}" doesn't match the bucket name, so nothing was touched.`);
-    info(`Expected: ${BUCKET}`);
+  if (nameLike) {
+    bad(`"${nameLike}" doesn't match, so nothing was touched.`);
+    info(`Expected exactly: ${BUCKET}`);
   }
   console.log("  To delete for real, pass the bucket name back:");
-  console.log(`     npm run teardown -- --confirm ${BUCKET}`);
+  console.log(`     npm run teardown -- ${BUCKET}`);
   console.log("\n  Add --keep-table or --keep-bucket to spare either one.");
   console.log("\n  Note this does NOT touch: your Clumio backups, or any CloudFront");
   console.log("  distribution you built by hand. Remove those in their own consoles.");

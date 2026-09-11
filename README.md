@@ -211,8 +211,9 @@ authenticate perfectly and still be unable to create a table or write an
 object. This probes each permission the demo needs and maps any denial to the
 exact IAM action, printing a policy you can paste straight in. Where the
 table or bucket already exists it does a real write-and-delete round trip, so
-the answer isn't inferred from policy. Add `-- --read-only` to skip the write
-probes.
+the answer isn't inferred from policy. To skip the write probes, run it
+directly as `node scripts/check-access.js --read-only` (flags don't survive
+`npm run` reliably on Windows).
 
 It goes through the AWS SDK rather than the CLI on purpose: that's the same
 credential path `server.js` and the seed take, and the two can resolve
@@ -243,6 +244,18 @@ exist at all:
 | Set for one command | `FOO=bar npm run seed` | `$env:FOO = "bar"; npm run seed` |
 
 Everything else (`npm run ...`) is identical on both.
+
+One more Windows quirk worth knowing: `npm run something -- --flag` often
+drops the `--flag` part on PowerShell and forwards only what follows it. So
+where a command takes options, run the script directly instead:
+
+```
+node scripts/check-access.js --read-only
+node scripts/setup.js --interactive
+```
+
+`npm run teardown -- <bucket-name>` is unaffected, because it looks for the
+bucket name itself rather than a flag.
 
 ## Run it end to end
 
@@ -534,13 +547,13 @@ Shows what exists and deletes nothing. To actually delete, pass the bucket
 name back:
 
 ```bash
-npm run teardown -- --confirm <your-bucket-name>
+npm run teardown -- <your-bucket-name>
 ```
 
-Typing the name is the safety catch: it's a flag rather than a prompt
-because prompts are unreliable under `npm run` on Windows, and it makes
-pointing this at the wrong account very difficult. `--keep-table` and
-`--keep-bucket` spare either one.
+Typing the exact bucket name is the safety catch. Anything else — a
+truncated name, a different name, no name — stays a dry run, and there's no
+prompt involved because prompts are unreliable under `npm run` on Windows.
+`--keep-table` and `--keep-bucket` spare either one.
 
 It empties the bucket properly (every object version and delete marker,
 since the seed enables versioning), disables PITR before removing the table

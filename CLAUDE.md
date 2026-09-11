@@ -88,7 +88,7 @@ goes on stage; do not assume the verified DynamoDB claim extends to S3.
 - `scripts/verify.js` — per-tenant audit proving tenants outside the blast
   radius were untouched. This output gets filmed.
 - `scripts/teardown.js` — deletes the table and bucket. Dry-run unless the
-  bucket name is passed back via `--confirm`. See Cost and cleanup.
+  bucket name is passed back as an argument. See Cost and cleanup.
 
 See `docs/s3-demo-runbook.md` for the full S3 demo procedure.
 
@@ -146,10 +146,11 @@ before deleting the table, or turn it off in the console if you're keeping
 the table.
 
 `scripts/teardown.js` removes the table and bucket. It is dry-run by default
-and requires the bucket name passed back via `--confirm` to do anything,
-which is a flag rather than a prompt because prompts don't work reliably
-under `npm run` on Windows. It deliberately leaves CloudFront and Clumio
-alone, since neither was created by this repo.
+and requires the exact bucket name passed as an argument to do anything. It
+matches on the name rather than a `--confirm` flag because `npm run x --
+--flag value` drops the flag on Windows PowerShell and forwards only the
+value, so a flag-based check would silently never fire. It deliberately
+leaves CloudFront and Clumio alone, since neither was created by this repo.
 
 The dashboard polls every four seconds by design (see Conventions) — that's
 what makes recovery appear on screen unattended, and it's fine for the length
