@@ -7,23 +7,43 @@ automatically), corruption is a *data* problem (nothing routes around wrong
 content — you have to recover the actual bytes). See `CLAUDE.md` → "S3
 failover design" for the narrative framing.
 
+## What is actually in the bucket
+
+Two different kinds of object, and the difference drives the whole demo:
+
+- `menu/<slug>/menu.json` — **load-bearing.** The published menu document the
+  storefront renders from. The menu is not in DynamoDB. No document means the
+  tenant cannot show a menu and therefore cannot take orders at all.
+- `menu/<slug>/<item>.svg` — menu artwork. Cosmetic; a missing or wrong image
+  is ugly but the tenant keeps trading.
+- `settlement/<slug>/latest.csv` — finance export, not on the critical path.
+
+So deleting `menu.json` is an outage, and corrupting an image is not. That
+asymmetry is the point of the two scenarios below.
+
 ## Scenario 1 — deletion (availability)
 
 ```bash
 npm run s3-delete-incident
 ```
 
-Hard-deletes the menu artwork and settlement CSV for the three blast-radius
-tenants (`alma-kitchen`, `brick-lane-grill`, `corner-pantry`). S3 responds
-403 or 404 for those keys from then on.
+Hard-deletes everything under `menu/<slug>/` — **including `menu.json`** —
+plus the settlement CSV, for the three blast-radius tenants
+(`alma-kitchen`, `brick-lane-grill`, `corner-pantry`). S3 responds 403 or
+404 for those keys from then on.
 
-- If the app is reading direct presigned S3 URLs (`IMAGE_BASE_URL` unset),
-  the gallery shows the existing `404 — object not found` tiles. This is the
-  local/no-CloudFront path — see "Local testing" below.
-- If the app is reading through the CloudFront origin group, CloudFront's
-  origin failover should mean the gallery keeps rendering normally, served
-  from the Clumio Instant Access origin, with no visible change and no one
-  touching anything. That's the clip.
+- If the app is reading direct from S3 (`IMAGE_BASE_URL` unset), those three
+  tenants go **down**: the dashboard shows "Storefront down — menu
+  unavailable" and states plainly that the restaurant cannot take orders.
+  This is the no-CloudFront path, and it is the "before" half of the story.
+- If the app is reading through the CloudFront origin group, failover should
+  mean the menu document and artwork are served from the Clumio Instant
+  Access origin instead — the storefront keeps trading, with no visible
+  change and nobody touching anything. That's the clip.
+
+Worth showing both: run it once without `IMAGE_BASE_URL` to film three
+restaurants going dark, then again with the origin group in place to show
+the same deletion doing nothing at all.
 
 **Recovery:** nothing to do in Clumio during the outage — Instant Access is
 already serving reads. The actual recovery step is restoring the source
@@ -38,9 +58,9 @@ primary automatically the moment those objects reappear — there is no
 npm run s3-corrupt-incident
 ```
 
-Overwrites every menu SVG for the same three tenants **in place** — same
-key, new (visibly wrong) content. S3 keeps returning 200 for every one of
-those keys.
+Overwrites every menu **image** for the same three tenants in place — same
+key, new (visibly wrong) content. `menu.json` is deliberately left alone, so
+the tenants stay up and keep trading. S3 keeps returning 200 for every key.
 
 - CloudFront origin failover does **not** fire. There is no 403/404 to
   trigger on — as far as CloudFront and the origin group are concerned,
@@ -48,6 +68,10 @@ those keys.
 - The gallery renders whatever comes back, which is the corrupted artwork,
   on both the direct-S3 path and the CloudFront path. This is intentional:
   it's the visual proof that failover doesn't help here.
+- The dashboard still reports the tenant **healthy** — green banner, assets
+  "all present" — while the customer is looking at garbage. Say this out
+  loud on stage: every error-code-based check passes, which is exactly why
+  an availability mechanism cannot catch a data problem.
 
 **Recovery:** roll back the object to the version that existed before the
 overwrite. This repo enables S3 bucket versioning at seed time

@@ -120,16 +120,24 @@ npm run s3-delete-incident   # availability: deletes objects, CloudFront fails o
 npm run s3-corrupt-incident  # data: overwrites objects in place, failover does NOT fire
 ```
 
-`s3-delete-incident` removes menu artwork and settlement exports for the
-same three tenants. Reading direct from S3 (`IMAGE_BASE_URL` unset), the
-gallery renders `404 — object not found` tiles. Reading through the
-CloudFront origin group, it should keep working unattended — that's the
-clip. Recovery is restoring the source objects; the origin group returns to
-primary automatically.
+The storefront renders its menu from a document published to S3 at
+`menu/<slug>/menu.json` — the menu is not in DynamoDB. That makes S3
+genuinely load-bearing: lose the document and the tenant cannot take
+orders.
 
-`s3-corrupt-incident` overwrites the same menu artwork in place with visibly
-wrong content — S3 still returns 200, so CloudFront failover never
-triggers. Recovery is the previous object version, not Instant Access.
+`s3-delete-incident` removes everything under `menu/<slug>/` (menu document
+and artwork) plus settlement exports, for the same three tenants. Reading
+direct from S3 (`IMAGE_BASE_URL` unset), those three restaurants go **down**
+— "Storefront down — menu unavailable". Reading through the CloudFront
+origin group, Instant Access serves the document instead and they keep
+trading unattended — that's the clip. Recovery is restoring the source
+objects; the origin group returns to primary automatically.
+
+`s3-corrupt-incident` overwrites the menu **images only** in place with
+visibly wrong content, leaving `menu.json` intact so the tenants stay up. S3
+still returns 200, so CloudFront failover never triggers, and the dashboard
+still reports healthy while customers see garbage. Recovery is the previous
+object version, not Instant Access.
 
 ## Recording
 

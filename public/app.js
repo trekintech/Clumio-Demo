@@ -143,9 +143,25 @@ function renderRail() {
   el("shown").textContent = tenants.length;
 }
 
-function renderGallery(menu) {
+function renderGallery(menu, available) {
   const g = el("gallery");
   g.innerHTML = "";
+
+  if (available === false) {
+    g.classList.add("is-down");
+    const panel = document.createElement("div");
+    panel.className = "outage";
+    const h = document.createElement("div");
+    h.className = "big";
+    h.textContent = "Menu unavailable";
+    const p = document.createElement("div");
+    p.textContent = "menu.json could not be fetched — ordering is disabled for this restaurant";
+    panel.append(h, p);
+    g.appendChild(panel);
+    return;
+  }
+
+  g.classList.remove("is-down");
   for (const m of menu) {
     const tile = document.createElement("div");
     tile.className = "tile";
@@ -218,13 +234,14 @@ function renderOrders(orders) {
 
 function renderBanner(d) {
   const b = el("banner");
+  const down = d.menuAvailable === false;
   const broken = d.counts.failing > 0 || d.assetsMissing > 0;
-  b.className = broken ? "banner bad" : "banner ok";
+  b.className = down || broken ? "banner bad" : "banner ok";
   b.innerHTML = "";
 
   const icon = document.createElement("span");
   icon.className = "icon";
-  icon.textContent = broken ? "!" : "✓";
+  icon.textContent = down || broken ? "!" : "✓";
 
   const text = document.createElement("span");
   const t = document.createElement("span");
@@ -232,7 +249,11 @@ function renderBanner(d) {
   const sub = document.createElement("span");
   sub.className = "d";
 
-  if (broken) {
+  if (down) {
+    t.textContent = "Storefront down — menu unavailable";
+    sub.textContent =
+      "The published menu could not be loaded, so this restaurant cannot take any orders.";
+  } else if (broken) {
     const parts = [];
     if (d.counts.failing) parts.push(`${d.counts.failing} orders failing validation`);
     if (d.assetsMissing) parts.push(`${d.assetsMissing} menu assets unreachable`);
@@ -258,7 +279,7 @@ async function refresh() {
     lastGood = Date.now();
     setBeat();
 
-    health[current] = d.counts.failing === 0 && d.assetsMissing === 0;
+    health[current] = d.counts.failing === 0 && d.assetsMissing === 0 && d.menuAvailable !== false;
     renderRail();
 
     el("tname").textContent = d.name;
@@ -278,15 +299,21 @@ async function refresh() {
       : "none";
 
     const assets = el("s-assets");
-    assets.textContent = `${d.menu.length - d.assetsMissing}/${d.menu.length}`;
-    assets.className = d.assetsMissing ? "value bad" : "value";
-    el("f-assets").textContent = d.assetsMissing ? `${d.assetsMissing} missing from S3` : "all present";
+    if (d.menuAvailable === false) {
+      assets.textContent = "—";
+      assets.className = "value bad";
+      el("f-assets").textContent = "menu not published";
+    } else {
+      assets.textContent = `${d.menu.length - d.assetsMissing}/${d.menu.length}`;
+      assets.className = d.assetsMissing ? "value bad" : "value";
+      el("f-assets").textContent = d.assetsMissing ? `${d.assetsMissing} missing from S3` : "all present";
+    }
 
     const gross = d.orders.reduce((a, o) => a + (o.corrupt ? 0 : o.total || 0), 0);
     el("s-value").textContent = gbp.format(gross);
     el("f-value").textContent = d.counts.failing ? "excludes failed orders" : "recent orders";
 
-    renderGallery(d.menu);
+    renderGallery(d.menu, d.menuAvailable);
     renderOrders(d.orders);
   } catch (err) {
     const info = interpret(err.message);

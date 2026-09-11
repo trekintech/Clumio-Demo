@@ -237,17 +237,21 @@ async function seedTenant(tenant, index) {
     status: "active"
   });
 
-  for (const m of menu) {
-    items.push({
-      pk,
-      sk: `MENU#${m.id}`,
-      entity: "menuItem",
-      itemId: m.id,
+  // The menu is NOT in DynamoDB. It is published to S3 as the document the
+  // storefront actually serves — see CLAUDE.md "What S3 holds, and why it is
+  // load-bearing". Lose this object and the tenant cannot take orders at all.
+  const menuDoc = {
+    tenant: tenant.slug,
+    name: tenant.name,
+    cuisine: tenant.cuisine,
+    publishedAt: new Date().toISOString(),
+    items: menu.map((m) => ({
+      id: m.id,
       name: m.name,
       price: m.price,
       imageKey: `menu/${tenant.slug}/${m.id}.svg`
-    });
-  }
+    }))
+  };
 
   const modifierPool = ["Extra sauce", "No chilli", "Large", "Side salad", "Gluten free"];
   const base = 40000 + index * 1000;
@@ -280,6 +284,15 @@ async function seedTenant(tenant, index) {
 
   await writeBatch(items);
 
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: `menu/${tenant.slug}/menu.json`,
+      Body: JSON.stringify(menuDoc, null, 2),
+      ContentType: "application/json"
+    })
+  );
+
   for (const m of menu) {
     await s3.send(
       new PutObjectCommand({
@@ -308,7 +321,9 @@ async function seedTenant(tenant, index) {
     })
   );
 
-  console.log(`  ${tenant.name}: ${ORDERS_PER_TENANT} orders, ${menu.length} menu items`);
+  console.log(
+    `  ${tenant.name}: ${ORDERS_PER_TENANT} orders, ${menu.length} menu items published to s3://${BUCKET}/menu/${tenant.slug}/menu.json`
+  );
 }
 
 // Synthetic tenants exist only to make the dropdown read as a real estate

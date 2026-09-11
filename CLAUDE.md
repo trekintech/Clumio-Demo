@@ -69,7 +69,8 @@ goes on stage; do not assume the verified DynamoDB claim extends to S3.
   browser.
 - `public/` — plain HTML, CSS and vanilla JS. No build step, no framework. Keep
   it that way; a build step is one more thing to fail before a live session.
-- `config.js` — tenants, menus, blast radius, resource names. Single source of
+- `config.js` — tenants, menu definitions (published to S3 at seed time, see
+  "What S3 holds"), blast radius, resource names. Single source of
   truth for demo data.
 - `validation.js` — the rule that decides whether an order is corrupt. Shared
   between the server and the verify script so the dashboard and the terminal
@@ -145,6 +146,29 @@ what makes recovery appear on screen unattended, and it's fine for the length
 of a demo session. It is not a reason to leave `npm start` running for days
 afterwards. Stop the local server once you're done recording.
 
+## What S3 holds, and why it is load-bearing
+
+**The menu is not in DynamoDB. It is a document published to S3** at
+`menu/<slug>/menu.json`, and the storefront renders from it. DynamoDB holds
+tenants and orders only.
+
+This is deliberate and it is the whole reason the S3 clip has a business
+story. An earlier version kept the menu in DynamoDB and put only artwork in
+S3 — which meant deleting the S3 objects produced broken images while the
+app kept happily taking orders. Calling that "an outage" in front of partner
+solutions engineers would not survive the first question, because the app
+visibly still worked.
+
+Now the dependency is real: no menu document means the tenant cannot serve a
+menu, so it cannot take a single order. `server.js` reports this as
+`menuAvailable: false`, the dashboard renders a "Storefront down" state, and
+`verify.js` reports the tenant as `DOWN` rather than `DEGRADED`. Historical
+orders still render — the damage is prospective revenue, which is the
+correct and defensible claim.
+
+Do not move the menu back into DynamoDB to "simplify" the data model. It
+would silently reduce the S3 scenario back to a cosmetic one.
+
 ## S3 failover design
 
 The S3 clip uses a CloudFront origin group in front of the source bucket, not
@@ -160,12 +184,19 @@ steps, the cache-TTL warning, and the tier constraint.
 - Deletion → S3 returns 403/404 → CloudFront's origin group fails over
   automatically → the storefront keeps working with no human intervention.
   This is an *availability* problem, and it's the one CloudFront failover can
-  actually solve. `scripts/s3-delete-incident.js` produces it.
+  actually solve. `scripts/s3-delete-incident.js` produces it. Without the
+  origin group in front, the same deletion takes the tenant fully down — no
+  menu, no orders — which is what makes the failover worth showing.
 - Overwrite → S3 still returns 200, just with corrupted content → failover
   never fires, because there is no error code to trigger on. This is a *data*
   problem — the bytes are wrong, not missing — and needs the previous object
   version restored, not a different origin. `scripts/s3-corrupt-incident.js`
-  produces it.
+  produces it. It deliberately overwrites **images only** and leaves
+  `menu.json` intact, so the tenant stays up and serving: corrupting the menu
+  document too would take it down and collapse the two scenarios into one.
+  Note the storefront still reports itself healthy in this state — every
+  error-code-based check says green while the customer sees garbage. That is
+  the point, and it is worth saying out loud on stage.
 
 These two scenarios must stay in separate scripts and separate narration.
 Conflating them ("recovery fixed it" without saying which failure mode) is

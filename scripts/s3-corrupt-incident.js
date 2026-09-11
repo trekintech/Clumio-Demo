@@ -39,7 +39,11 @@ async function main() {
 
   let total = 0;
   for (const slug of BLAST_RADIUS) {
-    const keys = await keysUnder(`menu/${slug}/`);
+    // Images only. menu.json is deliberately left untouched: this scenario
+    // must keep the storefront UP and serving 200s with wrong content. If the
+    // menu document were corrupted too, the tenant would go down and this
+    // would become the deletion scenario. Keep the two separate.
+    const keys = (await keysUnder(`menu/${slug}/`)).filter((k) => k.endsWith(".svg"));
     if (!keys.length) {
       console.log(`  ${slug}: nothing found, has it been seeded?`);
       continue;
@@ -56,7 +60,7 @@ async function main() {
       );
     }
     total += keys.length;
-    console.log(`  ${slug}: ${keys.length} objects overwritten in place`);
+    console.log(`  ${slug}: ${keys.length} images overwritten in place (menu.json untouched — tenant stays up)`);
   }
 
   console.log(`\n${total} objects corrupted (each key unchanged, still returns 200).`);

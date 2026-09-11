@@ -22,16 +22,25 @@ async function auditTenant(slug) {
 
   const bad = orders.filter(isCorrupt).length;
 
-  const assets = await s3.send(
+  const listed = await s3.send(
     new ListObjectsV2Command({ Bucket: BUCKET, Prefix: `menu/${slug}/` })
   );
+  const keys = (listed.Contents || []).map((o) => o.Key);
 
-  return { slug, total: orders.length, bad, assets: assets.KeyCount || 0 };
+  // menu.json is what decides whether the tenant can trade at all; images
+  // are cosmetic by comparison. Report them separately.
+  return {
+    slug,
+    total: orders.length,
+    bad,
+    images: keys.filter((k) => k.endsWith(".svg")).length,
+    trading: keys.includes(`menu/${slug}/menu.json`)
+  };
 }
 
 async function main() {
-  console.log("Tenant                 Orders   Corrupt   Menu assets   State");
-  console.log("-".repeat(68));
+  console.log("Tenant                 Orders   Corrupt   Images   Trading   State");
+  console.log("-".repeat(72));
 
   let anyBad = false;
   let collateral = false;
@@ -43,17 +52,18 @@ async function main() {
   for (const t of TENANTS.filter((t) => !t.synthetic)) {
     const r = await auditTenant(t.slug);
     const inBlast = BLAST_RADIUS.includes(t.slug);
-    const healthy = r.bad === 0 && r.assets > 0;
+    const healthy = r.bad === 0 && r.images > 0 && r.trading;
     if (!healthy) anyBad = true;
     if (!healthy && !inBlast) collateral = true;
 
-    const state = healthy ? "healthy" : "DEGRADED";
+    // "DOWN" outranks "DEGRADED": no menu document means no orders at all.
+    const state = !r.trading ? "DOWN" : healthy ? "healthy" : "DEGRADED";
     console.log(
-      `${t.name.padEnd(22)} ${String(r.total).padStart(6)}   ${String(r.bad).padStart(7)}   ${String(r.assets).padStart(11)}   ${state}`
+      `${t.name.padEnd(22)} ${String(r.total).padStart(6)}   ${String(r.bad).padStart(7)}   ${String(r.images).padStart(6)}   ${(r.trading ? "yes" : "NO").padStart(7)}   ${state}`
     );
   }
 
-  console.log("-".repeat(68));
+  console.log("-".repeat(72));
   if (!anyBad) {
     console.log("All tenants healthy. Recovery verified.");
   } else if (collateral) {

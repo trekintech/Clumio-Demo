@@ -31,6 +31,33 @@ app.get("/api/tenants", (_req, res) => {
   res.json({ tenants: TENANTS, region: REGION, table: TABLE, bucket: BUCKET });
 });
 
+// The storefront's menu is a document published to S3, not a DynamoDB record.
+// If it cannot be loaded the tenant genuinely cannot take orders — that is the
+// outage the S3 clip demonstrates. See CLAUDE.md "What S3 holds".
+async function loadMenuDocument(slug) {
+  if (IMAGE_BASE_URL) {
+    const base = IMAGE_BASE_URL.replace(/\/$/, "");
+    try {
+      const res = await fetch(`${base}/menu/${slug}/menu.json`, { cache: "no-store" });
+      if (!res.ok) return { available: false, items: [] };
+      const doc = await res.json();
+      return { available: true, items: doc.items || [] };
+    } catch {
+      return { available: false, items: [] };
+    }
+  }
+
+  try {
+    const res = await s3.send(
+      new GetObjectCommand({ Bucket: BUCKET, Key: `menu/${slug}/menu.json` })
+    );
+    const doc = JSON.parse(await res.Body.transformToString());
+    return { available: true, items: doc.items || [] };
+  } catch {
+    return { available: false, items: [] };
+  }
+}
+
 async function resolveMenuImages(slug, menu) {
   // CloudFront mode: the app has no business checking the source bucket
   // directly — that's what the origin group is for. Trust the distribution
@@ -70,12 +97,18 @@ async function resolveMenuImages(slug, menu) {
 app.get("/api/tenant/:slug", async (req, res) => {
   const { slug } = req.params;
   try {
-    const [orders, menu] = await Promise.all([
+    const tenant = TENANTS.find((t) => t.slug === slug);
+
+    // Synthetic filler tenants never had a published menu, so a missing
+    // document is expected for them and is not an outage. See CLAUDE.md Scale.
+    const [orders, menuDoc] = await Promise.all([
       queryPartition(slug, "ORDER#"),
-      queryPartition(slug, "MENU#")
+      tenant?.synthetic
+        ? Promise.resolve({ available: true, items: [] })
+        : loadMenuDocument(slug)
     ]);
 
-    const withImages = await resolveMenuImages(slug, menu);
+    const withImages = await resolveMenuImages(slug, menuDoc.items);
 
     orders.sort((a, b) => (a.orderId < b.orderId ? 1 : -1));
     const flagged = orders.map((o) => ({ ...o, corrupt: isCorrupt(o) }));
@@ -83,13 +116,16 @@ app.get("/api/tenant/:slug", async (req, res) => {
     res.json({
       slug,
       partitionKey: `TENANT#${slug}`,
-      name: TENANTS.find((t) => t.slug === slug)?.name || slug,
+      name: tenant?.name || slug,
       orders: flagged.slice(0, 60),
       counts: {
         total: orders.length,
         failing: flagged.filter((o) => o.corrupt).length
       },
       menu: withImages,
+      // False means the storefront cannot serve a menu at all — customers
+      // cannot order. This is the S3 availability scenario.
+      menuAvailable: menuDoc.available,
       // In CloudFront mode "missing" isn't a concept the app can see —
       // that's the point of the origin group. See resolveMenuImages above.
       assetsMissing: IMAGE_BASE_URL ? 0 : withImages.filter((m) => !m.imagePresent).length
