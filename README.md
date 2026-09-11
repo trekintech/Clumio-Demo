@@ -487,6 +487,33 @@ The heartbeat top right shows how fresh the data is: green when live, amber
 past ten seconds, red past twenty. If AWS stops answering mid-recording,
 you'll spot it before the audience does.
 
+### "Port 5173 is already in use"
+
+An earlier `npm start` is still running. That matters beyond the error: the
+old process keeps serving the files it started with, so after pulling a
+change you can be looking at the previous version and think the fix didn't
+work.
+
+```bash
+lsof -ti tcp:5173 | xargs kill      # macOS / Linux
+```
+
+```powershell
+Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
+```
+
+The PowerShell line stops every Node process, which is the quick option. To
+target just this one, use `Get-NetTCPConnection -LocalPort 5173` to find the
+owning process first. Or leave it and use another port:
+
+```bash
+PORT=5174 npm start
+```
+
+```powershell
+$env:PORT = "5174"; npm start
+```
+
 ## Reset
 
 ```bash

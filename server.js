@@ -139,7 +139,34 @@ app.get("/api/tenant/:slug", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Kerbside ops running on http://localhost:${PORT}`);
   console.log(`Reading ${TABLE} and ${BUCKET} in ${REGION}`);
+});
+
+// Without this, a port clash prints an unhandled 'error' event and a stack
+// trace - which is both alarming mid-demo and says nothing about the fix.
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`\nPort ${PORT} is already in use.`);
+    console.error("Another copy of this server is probably still running, possibly an");
+    console.error("older one from before a code change, which will serve stale files.\n");
+    console.error("Stop it, then start again:");
+    if (process.platform === "win32") {
+      console.error("  Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force");
+    } else {
+      console.error(`  lsof -ti tcp:${PORT} | xargs kill`);
+    }
+    console.error("\nOr run this one on a different port:");
+    console.error(
+      process.platform === "win32"
+        ? `  $env:PORT = "${PORT + 1}"; npm start`
+        : `  PORT=${PORT + 1} npm start`
+    );
+  } else if (err.code === "EACCES") {
+    console.error(`\nNot allowed to bind port ${PORT}. Try a port above 1024.`);
+  } else {
+    console.error(`\nServer failed to start: ${err.message}`);
+  }
+  process.exit(1);
 });
