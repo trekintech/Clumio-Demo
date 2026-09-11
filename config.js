@@ -1,6 +1,18 @@
-export const REGION = process.env.AWS_REGION || "eu-west-2";
-export const TABLE = process.env.KERBSIDE_TABLE || "kerbside-app";
-export const BUCKET = process.env.KERBSIDE_BUCKET || "kerbside-demo-assets";
+import { readLocalConfig } from "./scripts/lib/local-config.js";
+
+// Written by `npm run setup`, so a bucket name chosen there is still in effect
+// in every later terminal. Environment variables always take precedence.
+const local = readLocalConfig();
+
+if (!process.env.AWS_PROFILE && local.profile) {
+  // Set before any SDK client is constructed, so the default credential chain
+  // picks it up the same way an exported variable would.
+  process.env.AWS_PROFILE = local.profile;
+}
+
+export const REGION = process.env.AWS_REGION || local.region || "eu-west-2";
+export const TABLE = process.env.KERBSIDE_TABLE || local.table || "kerbside-app";
+export const BUCKET = process.env.KERBSIDE_BUCKET || local.bucket || "kerbside-demo-assets";
 export const PORT = Number(process.env.PORT || 5173);
 
 // Unset (default): server builds presigned S3 URLs directly, checks the

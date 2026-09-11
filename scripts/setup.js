@@ -1,14 +1,27 @@
-// One guided setup. Installs dependencies, resolves credentials, picks a
-// bucket, verifies permissions, and offers to seed - asking whenever it needs
-// a decision instead of telling you to go and run something else.
+// One guided setup that gets on with it: installs dependencies, resolves
+// credentials, picks and creates the S3 bucket, verifies permissions, and
+// offers to seed.
 //
-// Non-interactive (CI, piped, or --yes) it reports the same findings as plain
-// text and exits, never waiting for input that can't arrive.
+// Everything has a sensible automatic default, so it never waits on input and
+// never hangs. Run `node scripts/setup.js` directly (rather than via npm) if
+// you want it to ask before choosing - npm pipes stdio, so prompts are
+// unavailable through `npm run`.
 import { execSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { CreateBucketCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
 import { REGION, TABLE, BUCKET } from "../config.js";
 import { setEnv, isWindows } from "./env-syntax.js";
 import { ask, confirm, choose, canPrompt, closePrompt } from "./lib/prompt.js";
-import { listProfiles, credentialsWork, probeAccess, policyDocument } from "./lib/aws-probe.js";
+import {
+  listProfiles,
+  credentialsWork,
+  probeAccess,
+  policyDocument,
+  clientsFor,
+  denied,
+  absent
+} from "./lib/aws-probe.js";
+import { writeLocalConfig, LOCAL_CONFIG_PATH } from "./lib/local-config.js";
 
 if (isWindows()) {
   try {
@@ -18,14 +31,11 @@ if (isWindows()) {
   }
 }
 
-const M = isWindows() ? { ok: "[ok]", bad: "[!!]", info: " - " } : { ok: "✓", bad: "✗", info: " - " };
+const M = isWindows() ? { ok: "[ok]", bad: "[!!]" } : { ok: "✓", bad: "✗" };
 const ok = (m) => console.log(`  ${M.ok} ${m}`);
 const bad = (m) => console.log(`  ${M.bad} ${m}`);
 const info = (m) => console.log(`     ${m}`);
-
-function step(n, title) {
-  console.log(`\n${n}. ${title}`);
-}
+const step = (n, t) => console.log(`\n${n}. ${t}`);
 
 function fail(message, hints = []) {
   console.log(`\n${message}`);
@@ -34,25 +44,25 @@ function fail(message, hints = []) {
   process.exit(1);
 }
 
-let bucket = process.env.KERBSIDE_BUCKET || BUCKET;
 const interactive = canPrompt();
 
 console.log("\nKerbside setup");
-if (!interactive) {
-  console.log("(non-interactive: reporting only, no prompts)");
-}
+console.log(
+  interactive
+    ? "Interactive: it'll ask before making choices."
+    : "Automatic: it'll choose sensible defaults and tell you what it picked."
+);
 
 // ------------------------------------------------------- 1. dependencies
 
 step(1, "Dependencies");
 try {
-  // Quiet by default; the funding/audit noise buries the things that matter.
   execSync("npm install --no-fund --no-audit --loglevel=error", { stdio: ["ignore", "pipe", "pipe"] });
   ok("Installed");
 } catch (err) {
   console.log(err.stdout?.toString() || "");
   console.log(err.stderr?.toString() || "");
-  fail("Dependency install failed. The output above should say why.");
+  fail("Dependency install failed - the output above should say why.");
 }
 
 const nodeMajor = Number(process.versions.node.split(".")[0]);
@@ -66,74 +76,57 @@ else
 // -------------------------------------------------------- 2. credentials
 
 step(2, "AWS credentials");
+console.log("     Checking whether AWS credentials resolve...");
 
 let creds = await credentialsWork(REGION);
 
 if (!creds.ok && interactive) {
   bad("No AWS credentials found.");
   const profiles = listProfiles();
-
-  let resolved = false;
-  for (let attempt = 0; attempt < 3 && !resolved; attempt++) {
+  for (let attempt = 0; attempt < 3 && !creds.ok; attempt++) {
     const options = [];
     if (profiles.length) options.push({ label: `Use an existing profile (${profiles.join(", ")})`, value: "profile" });
     options.push({ label: "Sign in with IAM Identity Center / SSO", value: "sso" });
     options.push({ label: "Enter access keys", value: "keys" });
-    options.push({ label: "Quit and sort it out myself", value: "quit" });
+    options.push({ label: "Quit", value: "quit" });
 
     const pick = await choose("  How do you want to authenticate?", options);
+    if (pick === "quit") break;
 
-    if (pick === "profile") {
-      const name =
-        profiles.length === 1
-          ? profiles[0]
-          : (await ask(`  Which profile? [${profiles[0]}] `)) || profiles[0];
-      process.env.AWS_PROFILE = name;
-      console.log(`  Checking ${name}...`);
-      creds = await credentialsWork(REGION);
-      if (!creds.ok && (await confirm(`  "${name}" didn't work. It may need an SSO login. Try that now?`))) {
-        try {
+    try {
+      if (pick === "profile") {
+        const name = profiles.length === 1 ? profiles[0] : (await ask(`  Which profile? [${profiles[0]}] `)) || profiles[0];
+        process.env.AWS_PROFILE = name;
+        creds = await credentialsWork(REGION);
+        if (!creds.ok && (await confirm(`  "${name}" didn't work - try an SSO login for it?`))) {
           execSync(`aws sso login --profile ${name}`, { stdio: "inherit" });
           creds = await credentialsWork(REGION);
-        } catch {
-          bad("aws sso login failed (is the AWS CLI installed?)");
         }
-      }
-    } else if (pick === "sso") {
-      const name = (await ask("  Profile name to create [kerbside-demo]: ")) || "kerbside-demo";
-      try {
+      } else if (pick === "sso") {
+        const name = (await ask("  Profile name to create [kerbside-demo]: ")) || "kerbside-demo";
         execSync(`aws configure sso --profile ${name}`, { stdio: "inherit" });
         execSync(`aws sso login --profile ${name}`, { stdio: "inherit" });
         process.env.AWS_PROFILE = name;
         creds = await credentialsWork(REGION);
-      } catch {
-        bad("That needs the AWS CLI, which isn't installed.");
-        info(isWindows() ? "winget install --exact --id Amazon.AWSCLI" : "brew install awscli");
-        info("Then open a NEW terminal and run: npm run setup");
-      }
-    } else if (pick === "keys") {
-      const name = (await ask("  Profile name to create [kerbside-demo]: ")) || "kerbside-demo";
-      try {
+      } else if (pick === "keys") {
+        const name = (await ask("  Profile name to create [kerbside-demo]: ")) || "kerbside-demo";
         execSync(`aws configure --profile ${name}`, { stdio: "inherit" });
         process.env.AWS_PROFILE = name;
         creds = await credentialsWork(REGION);
-      } catch {
-        bad("That needs the AWS CLI, which isn't installed.");
-        info(isWindows() ? "winget install --exact --id Amazon.AWSCLI" : "brew install awscli");
       }
-    } else {
-      break;
+    } catch {
+      bad("That step needs the AWS CLI, which isn't installed.");
+      info(isWindows() ? "winget install --exact --id Amazon.AWSCLI" : "brew install awscli");
+      info("Then open a NEW terminal and run: npm run setup");
     }
-
-    resolved = creds.ok;
   }
 }
 
 if (!creds.ok) {
-  fail("Still no working AWS credentials, so nothing further can be checked.", [
+  fail("No working AWS credentials, so nothing further can be checked.", [
     "Any source works: profile, SSO, assume-role, env vars, instance role.",
     `Set one and re-run, e.g. ${setEnv("AWS_PROFILE", "your-profile")}`,
-    "Full options are in the README under Prerequisites."
+    "Or see the README under Prerequisites."
   ]);
 }
 
@@ -141,98 +134,145 @@ ok(process.env.AWS_PROFILE ? `Working (profile: ${process.env.AWS_PROFILE})` : "
 
 // ------------------------------------------------------------- 3. bucket
 
-step(3, "S3 bucket name");
+step(3, "S3 bucket");
+
+let bucket = BUCKET;
 
 if (bucket === "kerbside-demo-assets") {
-  if (!interactive) {
-    fail('KERBSIDE_BUCKET is still the default, which will collide - bucket names are global.', [
-      setEnv("KERBSIDE_BUCKET", "kerbside-demo-assets-something-unique")
-    ]);
+  // The default is guaranteed to collide, since S3 names are global. Pick a
+  // unique one rather than making this a blocking question.
+  const suggested = `kerbside-demo-assets-${randomBytes(4).toString("hex")}`;
+  console.log(`     "${bucket}" is the shared default and will collide - S3 names are global.`);
+
+  if (interactive) {
+    const answer = await ask(`  Bucket name to use [${suggested}]: `);
+    bucket = answer || suggested;
+    while (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) {
+      console.log("     Lowercase letters, numbers, dots and hyphens only.");
+      bucket = (await ask(`  Bucket name to use [${suggested}]: `)) || suggested;
+    }
+  } else {
+    bucket = suggested;
+    console.log(`     Picked a unique name for you: ${bucket}`);
   }
-  bad(`"${bucket}" is the default and will collide - S3 names are globally unique.`);
-  let chosen = "";
-  while (!chosen) {
-    const answer = await ask("  Bucket name to use (e.g. kerbside-demo-assets-yourname): ");
-    if (/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(answer)) chosen = answer;
-    else if (answer) console.log("     Lowercase letters, numbers, dots and hyphens only.");
-  }
-  bucket = chosen;
-  process.env.KERBSIDE_BUCKET = bucket;
 }
+
+process.env.KERBSIDE_BUCKET = bucket;
 ok(`Using ${bucket} in ${REGION}`);
+
+// Create it here rather than leaving it to seed, so CreateBucket permission is
+// proven now and the permission probe below has a real bucket to test against.
+const { s3 } = clientsFor(REGION);
+let bucketReady = false;
+try {
+  await s3.send(new HeadBucketCommand({ Bucket: bucket }));
+  ok("Bucket already exists");
+  bucketReady = true;
+} catch (err) {
+  if (absent(err)) {
+    console.log("     Bucket doesn't exist yet. Creating it...");
+    try {
+      const input = { Bucket: bucket };
+      if (REGION !== "us-east-1") input.CreateBucketConfiguration = { LocationConstraint: REGION };
+      await s3.send(new CreateBucketCommand(input));
+      ok("Bucket created");
+      bucketReady = true;
+    } catch (createErr) {
+      if (denied(createErr)) {
+        bad("Not allowed to create the bucket (s3:CreateBucket denied).");
+        info("Either grant s3:CreateBucket, or create it by hand and re-run.");
+      } else if (createErr.name === "BucketAlreadyExists") {
+        bad(`"${bucket}" is taken by another AWS account. Re-run to get a new name,`);
+        info(`or set your own: ${setEnv("KERBSIDE_BUCKET", "something-unique")}`);
+      } else {
+        bad(`Could not create the bucket: ${createErr.name}`);
+      }
+    }
+  } else if (denied(err)) {
+    bad(`"${bucket}" exists but isn't accessible - it likely belongs to another account.`);
+    info("Re-run to get a fresh name, or set KERBSIDE_BUCKET yourself.");
+  } else {
+    bad(`Could not check the bucket: ${err.name}`);
+  }
+}
+
+// Persist now, so the name survives into every later terminal.
+writeLocalConfig({
+  bucket,
+  region: REGION,
+  table: TABLE,
+  ...(process.env.AWS_PROFILE ? { profile: process.env.AWS_PROFILE } : {})
+});
+ok(`Saved to ${LOCAL_CONFIG_PATH.split(/[\\/]/).pop()} - no need to set variables in new terminals`);
+
+if (!bucketReady) {
+  fail("Bucket isn't usable yet, so stopping here.");
+}
 
 // -------------------------------------------------------- 4. permissions
 
 step(4, "Permissions");
+console.log("     Probing what this role can actually do (writes and removes a test object)...");
 
 let probe = await probeAccess({ region: REGION, table: TABLE, bucket });
 
-async function reportAndMaybeRetry() {
-  while (true) {
-    for (const c of probe.checks) {
-      if (c.state === "ok") ok(c.label);
-      else if (c.state === "denied") {
-        bad(`${c.label} - DENIED`);
-        if (c.detail) info(c.detail);
-      } else if (c.state === "warn") {
-        bad(c.label);
-      } else {
-        console.log(`  ${M.info}${c.label}`);
-        if (c.detail) info(c.detail);
-      }
+while (true) {
+  for (const c of probe.checks) {
+    if (c.state === "ok") ok(c.label);
+    else if (c.state === "denied") {
+      bad(`${c.label} - DENIED`);
+      if (c.detail) info(c.detail);
+    } else if (c.state === "warn") bad(c.label);
+    else {
+      console.log(`     ${c.label}`);
+      if (c.detail) info(c.detail);
     }
-
-    if (probe.blocking === 0) return true;
-
-    const actions = [...new Set(probe.checks.filter((c) => c.action).map((c) => c.action))];
-    console.log("\n  Missing IAM permissions. Add this policy to the role, then retry:");
-    console.log();
-    console.log(policyDocument(TABLE, bucket, REGION));
-    console.log();
-    console.log(`  Actions needed: ${actions.join(", ")}`);
-
-    if (!interactive) return false;
-    if (!(await confirm("\n  Retry the permission check now?"))) return false;
-    console.log();
-    probe = await probeAccess({ region: REGION, table: TABLE, bucket });
   }
-}
 
-const permissionsOk = await reportAndMaybeRetry();
-if (!permissionsOk) {
-  fail("Setup stopped: the role can't do what the demo needs.");
+  if (probe.blocking === 0) break;
+
+  const actions = [...new Set(probe.checks.filter((c) => c.action).map((c) => c.action))];
+  console.log("\n  Missing permissions. Add this policy to the role:\n");
+  console.log(policyDocument(TABLE, bucket, REGION));
+  console.log(`\n  Actions needed: ${actions.join(", ")}`);
+
+  if (!interactive || !(await confirm("\n  Retry now?"))) {
+    fail("Stopping: the role can't do what the demo needs.");
+  }
+  console.log();
+  probe = await probeAccess({ region: REGION, table: TABLE, bucket });
 }
 
 // ------------------------------------------------------------ 5. finished
 
 step(5, "Ready");
 
-console.log("  Keep these for any new terminal you use:");
-console.log(`     ${setEnv("AWS_PROFILE", process.env.AWS_PROFILE || "(default chain)")}`);
-console.log(`     ${setEnv("KERBSIDE_BUCKET", bucket)}`);
+const seedChoice = interactive
+  ? await choose("  Seed the demo data now?", [
+      { label: "Small 50-tenant estate (quick, for rehearsing)", value: "small" },
+      { label: "Full 4,127-tenant estate (a few minutes, for recording)", value: "full" },
+      { label: "Not now", value: "no" }
+    ])
+  : "no";
 
-if (interactive) {
-  const what = await choose("\n  Seed the demo data now?", [
-    { label: "Yes, a small 50-tenant estate (fast, for rehearsing)", value: "small" },
-    { label: "Yes, the full 4,127-tenant estate (a few minutes, for recording)", value: "full" },
-    { label: "Not now", value: "no" }
-  ]);
-
-  if (what !== "no") {
-    const env = { ...process.env, KERBSIDE_BUCKET: bucket };
-    if (what === "small") env.SYNTHETIC_TENANT_COUNT = "50";
-    closePrompt();
-    console.log();
-    try {
-      execSync("node scripts/seed.js", { stdio: "inherit", env });
-      console.log("\nSeeded. Start the dashboard with: npm start");
-    } catch {
-      console.log("\nSeeding failed - the output above should say why.");
-      process.exit(1);
-    }
-    process.exit(0);
+if (seedChoice !== "no") {
+  const env = { ...process.env, KERBSIDE_BUCKET: bucket };
+  if (seedChoice === "small") env.SYNTHETIC_TENANT_COUNT = "50";
+  closePrompt();
+  console.log();
+  try {
+    execSync("node scripts/seed.js", { stdio: "inherit", env });
+  } catch {
+    console.log("\nSeeding failed - the output above should say why.");
+    process.exit(1);
   }
+  console.log("\nDone. Start the dashboard with: npm start");
+  process.exit(0);
 }
 
 closePrompt();
-console.log("\nNext: npm run seed, then npm start");
+console.log("  Everything checks out. Next:");
+console.log("     npm run seed     # load the demo data");
+console.log("     npm start        # then open http://localhost:5173");
+console.log("\n  To rehearse with a small estate first:");
+console.log(`     ${isWindows() ? '$env:SYNTHETIC_TENANT_COUNT = "50"; npm run seed' : "SYNTHETIC_TENANT_COUNT=50 npm run seed"}`);

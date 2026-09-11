@@ -6,3 +6,6 @@ incident.json
 *.log
 .DS_Store
 recordings/
+
+# written by npm run setup (local bucket/profile choice, no secrets)
+.kerbside-local.json

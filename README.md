@@ -252,45 +252,46 @@ Everything else (`npm run ...`) is identical on both.
 npm run setup
 ```
 
-One command, five steps, and it asks you whenever it needs a decision rather
-than sending you off to run something else:
+That's the whole thing. It never stops to ask you for something it can work
+out on its own, and it says what it's doing at each step:
 
 1. **Dependencies** — installed quietly.
-2. **Credentials** — if none resolve, it lists the profiles you already have
-   and offers to use one, or to sign in with SSO, or to enter access keys.
-   Picking an existing profile that needs an SSO refresh offers to do that
-   too.
-3. **Bucket name** — prompts for one if you're still on the default, and
-   checks it's validly formed. S3 names are globally unique so it has to be
-   yours.
-4. **Permissions** — probes what the role can actually do. If anything is
-   denied it prints a ready-to-paste IAM policy, then offers to re-check once
-   you've added it, so you can fix and retry without restarting.
-5. **Seed** — offers to load the data there and then: a small 50-tenant
-   estate for rehearsing, or the full 4,127-tenant one for recording.
+2. **Credentials** — checks yours resolve. If they don't, it stops and tells
+   you how; it doesn't guess.
+3. **Bucket** — if you're still on the shared default (which is guaranteed to
+   collide, since S3 names are global) it picks a unique name for you, then
+   **creates the bucket**. It tells you the name it chose.
+4. **Permissions** — probes what the role can genuinely do, writing and
+   deleting a test object rather than inferring from policy. Anything denied
+   gets a ready-to-paste IAM policy naming the exact actions.
+5. **Seed** — offers to load the data immediately.
 
-If you already have things set up, it just confirms them and moves on:
+**Your choices are remembered.** Setup writes the bucket name, region and
+profile to `.kerbside-local.json` (git-ignored, no secrets), and every script
+reads it. So you don't have to export anything in new terminals — open a
+fresh one, run `npm start`, and it already knows. Environment variables still
+win if you set them, so nothing is taken out of your hands:
 
 ```bash
-export AWS_PROFILE=<your-existing-profile>
-export KERBSIDE_BUCKET=kerbside-demo-assets-<something-unique>
+export KERBSIDE_BUCKET=my-own-bucket-name
 npm run setup
 ```
 
 ```powershell
-$env:AWS_PROFILE = "<your-existing-profile>"
-$env:KERBSIDE_BUCKET = "kerbside-demo-assets-<something-unique>"
+$env:KERBSIDE_BUCKET = "my-own-bucket-name"
 npm run setup
 ```
 
-Anything you choose inside `npm run setup` applies to that run only — a
-program can't change its parent shell's environment. So it prints the
-`export`/`$env:` lines at the end; paste those into any new terminal before
-running `npm start` there.
+**Prompts are optional.** Run through `npm run` and it works automatically,
+choosing defaults and reporting them — npm pipes its output, so questions
+aren't possible there. If you'd rather be asked before it picks a bucket name
+or seeds, run it directly instead:
 
-Non-interactive shells (CI, piped output, or `--yes`) skip every prompt and
-report the same findings as plain text, so it can never sit waiting for input
-that will never arrive.
+```
+node scripts/setup.js
+```
+
+Either way it never blocks waiting for input.
 
 To re-check permissions later without the full flow:
 
@@ -298,8 +299,8 @@ To re-check permissions later without the full flow:
 npm run check-access
 ```
 
-Neither command writes anything to AWS beyond a probe object it immediately
-deletes, and both are safe to re-run.
+Both are safe to re-run. Neither writes anything to AWS beyond a probe object
+it deletes immediately.
 
 ### 2. Rehearse with a small estate
 

@@ -1,74 +1,53 @@
-// Prompting that still works when stdin isn't a TTY.
+// Optional prompting.
 //
-// `npm run` on Windows pipes stdio through npm.ps1, so process.stdin.isTTY is
-// false even though a real human is sat at a real console. Relying on isTTY
-// alone means the prompts silently never appear, which is exactly the bug this
-// file exists to fix. So: fall back to opening the console device directly.
-import fs from "node:fs";
+// Deliberately strict: only prompt when stdin is genuinely a TTY. An earlier
+// version tried to open the console device directly (CONIN$ / dev/tty) so that
+// `npm run` on Windows could still prompt - npm pipes stdio through npm.ps1,
+// so isTTY is false there. Opening CONIN$ succeeds but never delivers input,
+// so the script decided it could prompt and then hung forever. Not worth it.
+//
+// Instead: every caller must have a sensible default, prompting is a nicety,
+// and nothing ever blocks. Running `node scripts/setup.js` directly (rather
+// than through npm) does give a real TTY if you want the questions.
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
 let rl = null;
-let usable = null;
-
-function openConsole() {
-  if (stdin.isTTY) return stdin;
-  // CONIN$ is the Windows console input device; /dev/tty the POSIX one.
-  for (const path of process.platform === "win32" ? ["\\\\.\\CONIN$", "conin$"] : ["/dev/tty"]) {
-    try {
-      const fd = fs.openSync(path, "r");
-      return fs.createReadStream("", { fd, autoClose: false });
-    } catch {
-      /* try the next candidate */
-    }
-  }
-  return null;
-}
-
-// Honour the usual CI signals, and an explicit opt-out, before anything else.
-function forcedNonInteractive() {
-  return Boolean(process.env.CI) || process.argv.includes("--yes") || process.argv.includes("--non-interactive");
-}
 
 export function canPrompt() {
-  if (usable !== null) return usable;
-  if (forcedNonInteractive()) {
-    usable = false;
-    return usable;
+  if (process.env.CI || process.argv.includes("--yes") || process.argv.includes("--non-interactive")) {
+    return false;
   }
-  const input = openConsole();
-  if (!input) {
-    usable = false;
-    return usable;
-  }
-  rl = createInterface({ input, output: stdout });
-  usable = true;
-  return usable;
+  return Boolean(stdin.isTTY);
+}
+
+function ensure() {
+  if (!rl) rl = createInterface({ input: stdin, output: stdout });
+  return rl;
 }
 
 export async function ask(question, fallback = "") {
   if (!canPrompt()) return fallback;
-  const answer = await rl.question(question);
+  const answer = await ensure().question(question);
   return answer.trim();
 }
 
 export async function confirm(question, defaultYes = true) {
-  if (!canPrompt()) return false;
+  if (!canPrompt()) return defaultYes;
   const answer = (await ask(`${question}${defaultYes ? " [Y/n] " : " [y/N] "}`)).toLowerCase();
   if (!answer) return defaultYes;
   return answer.startsWith("y");
 }
 
-// Presents a numbered menu and returns the chosen option's `value`.
 export async function choose(question, options) {
-  if (!canPrompt()) return null;
+  if (!canPrompt()) return options[0].value;
   console.log(`\n${question}`);
   options.forEach((o, i) => console.log(`    ${i + 1}) ${o.label}`));
   while (true) {
     const answer = await ask("  Choice: ");
+    if (!answer) return options[0].value;
     const n = Number(answer);
     if (Number.isInteger(n) && n >= 1 && n <= options.length) return options[n - 1].value;
-    if (!answer) return options[0].value;
     console.log("    Pick one of the numbers listed.");
   }
 }
