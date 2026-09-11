@@ -520,8 +520,59 @@ $env:PORT = "5174"; npm start
 npm run seed      # re-seeds over the top and restores a clean state
 ```
 
-To remove the table and bucket entirely, delete them from the console. There
-is no teardown script here on purpose.
+Re-seeding overwrites by key, so it's the quickest way back to a clean state
+between rehearsals. You don't need to tear anything down to run the demo
+again.
+
+## Tearing down
+
+```bash
+npm run teardown
+```
+
+Shows what exists and deletes nothing. To actually delete, pass the bucket
+name back:
+
+```bash
+npm run teardown -- --confirm <your-bucket-name>
+```
+
+Typing the name is the safety catch: it's a flag rather than a prompt
+because prompts are unreliable under `npm run` on Windows, and it makes
+pointing this at the wrong account very difficult. `--keep-table` and
+`--keep-bucket` spare either one.
+
+It empties the bucket properly (every object version and delete marker,
+since the seed enables versioning), disables PITR before removing the table
+so continuous-backup charges stop immediately, then deletes both.
+
+**It deliberately does not touch:**
+
+- **Your CloudFront distribution**, if you built one. Disable it, wait for it
+  to finish deploying, then delete it in the CloudFront console. This is the
+  one component worth remembering, as it bills while deployed regardless of
+  traffic.
+- **Your Clumio backups and protection policies.** Remove those in the Clumio
+  console.
+
+### What actually costs anything
+
+Honestly, not much between demos. The table holds a few hundred thousand
+small items, so it's tens of megabytes: storage and PITR are priced per GB,
+which at this size is negligible. The S3 content is smaller still.
+
+The costs worth thinking about, in order:
+
+1. **CloudFront**, if you leave a distribution deployed.
+2. **Write volume when seeding.** Each full seed writes ~314,000 items, so
+   repeatedly re-seeding the full estate costs more than leaving it sitting
+   there. Rehearse with `SYNTHETIC_TENANT_COUNT=50`.
+3. **PITR**, which bills against table size for as long as it's enabled. The
+   teardown turns it off; if you keep the table, turn it off yourself after
+   the event.
+
+So if you're coming back to this in a few days, leaving the table and bucket
+in place is usually cheaper than tearing down and re-seeding.
 
 ## Known caveats
 

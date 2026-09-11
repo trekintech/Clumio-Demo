@@ -21,7 +21,9 @@
     "pres3-corrupt-incident": "node scripts/require-install.js",
     "s3-corrupt-incident": "node scripts/s3-corrupt-incident.js",
     "preverify": "node scripts/require-install.js",
-    "verify": "node scripts/verify.js"
+    "verify": "node scripts/verify.js",
+    "preteardown": "node scripts/require-install.js",
+    "teardown": "node scripts/teardown.js"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.658.0",
