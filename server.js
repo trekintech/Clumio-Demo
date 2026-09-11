@@ -1,4 +1,5 @@
 import express from "express";
+import { fileURLToPath } from "node:url";
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { ListObjectsV2Command, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -7,7 +8,10 @@ import { TABLE, BUCKET, TENANTS, PORT, REGION, IMAGE_BASE_URL } from "./config.j
 import { isCorrupt } from "./validation.js";
 
 const app = express();
-app.use(express.static(new URL("./public", import.meta.url).pathname));
+// fileURLToPath, not .pathname: on Windows .pathname yields "/C:/Users/..."
+// with a leading slash before the drive letter, which isn't a valid path, so
+// express.static silently serves nothing and every request 404s.
+app.use(express.static(fileURLToPath(new URL("./public", import.meta.url))));
 
 async function queryPartition(slug, prefix) {
   const items = [];
