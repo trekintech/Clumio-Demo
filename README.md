@@ -9,12 +9,122 @@ application, not a product demo.
 
 ## Prerequisites
 
+You need four things:
+
 - Node 20 or later
+- AWS CLI v2, with credentials that resolve
 - An AWS sandbox account you don't mind corrupting data in
-- AWS CLI, with working credentials
 - A Clumio tenant connected to that account
 
-The profile needs:
+### Install the tooling
+
+**Windows.** There's a script for this. From the repo root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup-windows.ps1
+```
+
+It checks PowerShell, winget, Node, the AWS CLI and git, and prints the exact
+`winget` command for anything missing. Add `-Install` to let it install them
+for you:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup-windows.ps1 -Install
+```
+
+Open a **new** terminal afterwards, or freshly installed tools won't be on
+`PATH` yet. Once Node exists you can use `npm run setup:windows` instead of
+the long form.
+
+Installing by hand, if you prefer:
+
+```powershell
+winget install --exact --id OpenJS.NodeJS.LTS
+winget install --exact --id Amazon.AWSCLI
+winget install --exact --id Git.Git
+```
+
+No winget (Windows 10 before 1809)? Use the installers directly:
+<https://nodejs.org/en/download> and
+<https://awscli.amazonaws.com/AWSCLIV2.msi>.
+
+**macOS.**
+
+```bash
+brew install node awscli
+```
+
+**Linux (Debian/Ubuntu).** The distro Node is usually too old, so use
+NodeSource:
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip && sudo ./aws/install
+```
+
+Check both, on any platform:
+
+```
+node -v          # want v20 or higher
+aws --version    # want aws-cli/2.x
+```
+
+### Give the AWS CLI credentials
+
+Any source in the standard credential chain works. Pick whichever matches
+how your account is set up, then confirm with the same command at the end.
+
+**IAM Identity Center / SSO** (most common for role-based access):
+
+```
+aws configure sso
+aws sso login --profile kerbside-demo
+```
+
+**Assume an existing role.** Add a profile to your AWS config file
+(`~/.aws/config`, or `%USERPROFILE%\.aws\config` on Windows):
+
+```ini
+[profile kerbside-demo]
+role_arn       = arn:aws:iam::123456789012:role/YourExistingRole
+source_profile = default
+region         = eu-west-2
+```
+
+**Static keys** (simplest, least good):
+
+```
+aws configure --profile kerbside-demo
+```
+
+Then select the profile for your session and confirm it resolves:
+
+```bash
+export AWS_PROFILE=kerbside-demo         # macOS / Linux
+aws sts get-caller-identity
+```
+
+```powershell
+$env:AWS_PROFILE = "kerbside-demo"       # Windows PowerShell
+aws sts get-caller-identity
+```
+
+That last command must print an account and an ARN. If it does, the demo
+will authenticate, because nothing in this repo handles credentials itself.
+The SDK clients are built with a region and nothing else, so an existing
+role is fine, whether that's an assume-role profile, SSO, environment
+variables, or an instance role. `npm run setup` echoes the resolved ARN so
+you can confirm you're on the role you intended.
+
+If your credentials are temporary, prefer a profile the SDK can refresh on
+its own (`role_arn` with `source_profile`, or an SSO profile) over pasting
+short-lived `AWS_SESSION_TOKEN` values into your shell. Pasted session
+credentials don't refresh, and they expire mid-demo without warning.
+
+### Permissions the role needs
 
 | Service | Actions |
 |---|---|
@@ -22,16 +132,18 @@ The profile needs:
 | S3 | `CreateBucket`, `HeadBucket`, `PutBucketVersioning`, `PutObject`, `GetObject`, `ListBucket`, `DeleteObject` |
 | STS | `GetCallerIdentity` |
 
-No credentials are read from or written to this repo. The clients are built
-with a region and nothing else, so they use the standard AWS SDK credential
-chain. An existing role is fine: an assume-role profile, SSO, exported
-environment variables, or an instance role all work. `npm run setup` prints
-the resolved ARN so you can check you're on the one you meant to use.
+### A note on shell syntax
 
-If you're using temporary credentials, prefer a profile that lets the SDK
-refresh them itself (`role_arn` with `source_profile`, or an SSO profile)
-over pasting short-lived `AWS_SESSION_TOKEN` values into your shell. Pasted
-session credentials don't refresh, and they expire mid-demo without warning.
+Commands below are shown for bash. On Windows PowerShell, environment
+variables are set differently, and the inline `FOO=bar command` form doesn't
+exist at all:
+
+| | bash / zsh | PowerShell |
+|---|---|---|
+| Set for the session | `export FOO=bar` | `$env:FOO = "bar"` |
+| Set for one command | `FOO=bar npm run seed` | `$env:FOO = "bar"; npm run seed` |
+
+Everything else (`npm run ...`) is identical on both.
 
 ## Run it end to end
 
@@ -41,6 +153,13 @@ session credentials don't refresh, and they expire mid-demo without warning.
 export AWS_PROFILE=kerbside-demo
 export AWS_REGION=eu-west-2
 export KERBSIDE_BUCKET=kerbside-demo-assets-<something-unique>
+npm run setup
+```
+
+```powershell
+$env:AWS_PROFILE = "kerbside-demo"
+$env:AWS_REGION = "eu-west-2"
+$env:KERBSIDE_BUCKET = "kerbside-demo-assets-<something-unique>"
 npm run setup
 ```
 
@@ -59,6 +178,15 @@ Don't make your first run the 314,000-item one.
 SYNTHETIC_TENANT_COUNT=50 npm run seed
 SYNTHETIC_TENANT_COUNT=50 npm start
 ```
+
+```powershell
+$env:SYNTHETIC_TENANT_COUNT = "50"
+npm run seed
+npm start
+```
+
+On PowerShell the variable stays set for the rest of the session, so clear it
+with `Remove-Item Env:SYNTHETIC_TENANT_COUNT` before seeding the full estate.
 
 Open http://localhost:5173 and click about. Set the same tenant count for
 both commands, or the sidebar and the table won't agree.
@@ -138,6 +266,11 @@ To point the app at CloudFront, set the distribution domain and restart:
 
 ```bash
 export IMAGE_BASE_URL=https://<distribution-id>.cloudfront.net
+npm start
+```
+
+```powershell
+$env:IMAGE_BASE_URL = "https://<distribution-id>.cloudfront.net"
 npm start
 ```
 

@@ -47,6 +47,13 @@ export IMAGE_BASE_URL=https://<distribution-id>.cloudfront.net
 npm start
 ```
 
+On Windows PowerShell:
+
+```powershell
+$env:IMAGE_BASE_URL = "https://<distribution-id>.cloudfront.net"
+npm start
+```
+
 With that set, the server stops checking the source bucket and trusts
 CloudFront completely. If both origins were genuinely down you'd get the
 browser's own broken-image icon, which is the honest signal. Dressing that
