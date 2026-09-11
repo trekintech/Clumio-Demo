@@ -11,8 +11,7 @@
     "bad-deploy": "node scripts/bad-deploy.js",
     "s3-delete-incident": "node scripts/s3-delete-incident.js",
     "s3-corrupt-incident": "node scripts/s3-corrupt-incident.js",
-    "verify": "node scripts/verify.js",
-    "teardown": "node scripts/teardown.js"
+    "verify": "node scripts/verify.js"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.658.0",
