@@ -37,10 +37,10 @@ Get-ChildItem scripts        # Windows
 ls scripts                   # macOS / Linux
 ```
 
-You should see `setup.js`, `setup-windows.ps1`, `check-access.js`, `seed.js`,
-`bad-deploy.js`, `s3-delete-incident.js`, `s3-corrupt-incident.js`,
-`verify.js` and `env-syntax.js`. Anything missing means the snapshot predates
-it.
+You should see `setup.js`, `setup-windows.ps1`, `check-access.js`,
+`require-install.js`, `seed.js`, `bad-deploy.js`, `s3-delete-incident.js`,
+`s3-corrupt-incident.js`, `verify.js` and `env-syntax.js`. Anything missing
+means the snapshot predates it.
 
 Run every command from the repo root, the folder containing `package.json`.
 
@@ -415,6 +415,13 @@ venue PA is a risk you don't need.
 The dashboard never shows a raw stack trace. AWS failures are caught and
 rendered as a named panel with the fix, so if something breaks while you're
 on a projector it still looks like a working application.
+
+The terminal commands hold to the same standard. Every script that talks to
+AWS (`start`, `seed`, `bad-deploy`, both S3 incidents, `verify`,
+`check-access`) checks dependencies are installed before it does anything
+else, and fails with a one-line fix rather than Node's raw
+`ERR_MODULE_NOT_FOUND`. If you see that error anyway, you're running an old
+copy from before this check existed — see "Get the code" above.
 
 It recognises missing or expired credentials, table not found, bucket not
 found, access denied, DynamoDB throttling, and the local server dying. Each

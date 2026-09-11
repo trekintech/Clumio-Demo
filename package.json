@@ -5,14 +5,21 @@
   "type": "module",
   "description": "Multi-tenant ordering platform demo app for Clumio recovery scenarios",
   "scripts": {
+    "prestart": "node scripts/require-install.js",
     "start": "node server.js",
     "setup": "node scripts/setup.js",
     "setup:windows": "powershell -ExecutionPolicy Bypass -File scripts/setup-windows.ps1",
+    "precheck-access": "node scripts/require-install.js",
     "check-access": "node scripts/check-access.js",
+    "preseed": "node scripts/require-install.js",
     "seed": "node scripts/seed.js",
+    "prebad-deploy": "node scripts/require-install.js",
     "bad-deploy": "node scripts/bad-deploy.js",
+    "pres3-delete-incident": "node scripts/require-install.js",
     "s3-delete-incident": "node scripts/s3-delete-incident.js",
+    "pres3-corrupt-incident": "node scripts/require-install.js",
     "s3-corrupt-incident": "node scripts/s3-corrupt-incident.js",
+    "preverify": "node scripts/require-install.js",
     "verify": "node scripts/verify.js"
   },
   "dependencies": {
