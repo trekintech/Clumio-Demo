@@ -7,6 +7,43 @@ reaction and the Clumio console footage are both genuine.
 **Nothing here is branded.** This is meant to look like the customer's own
 application, not a product demo.
 
+## Get the code
+
+Clone it, so you can pull updates:
+
+```
+git clone https://github.com/trekintech/Clumio-Demo.git
+cd Clumio-Demo
+git pull            # later, to pick up changes
+```
+
+If you downloaded a ZIP instead, your folder will be called
+`Clumio-Demo-main` and it is a **snapshot**. It does not update, and
+`git pull` won't work in it. Scripts added after you downloaded simply won't
+be there, which shows up as:
+
+```
+The argument 'scripts\setup-windows.ps1' to the -File parameter does not exist.
+```
+
+If you see that, you have an old snapshot. Download a fresh ZIP, or clone
+properly. To check what your copy actually contains:
+
+```powershell
+Get-ChildItem scripts        # Windows
+```
+
+```bash
+ls scripts                   # macOS / Linux
+```
+
+You should see `setup.js`, `setup-windows.ps1`, `check-access.js`, `seed.js`,
+`bad-deploy.js`, `s3-delete-incident.js`, `s3-corrupt-incident.js`,
+`verify.js` and `env-syntax.js`. Anything missing means the snapshot predates
+it.
+
+Run every command from the repo root, the folder containing `package.json`.
+
 ## Prerequisites
 
 You need four things:
@@ -21,8 +58,11 @@ You need four things:
 **Windows.** There's a script for this. From the repo root:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\setup-windows.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1
 ```
+
+If that reports the file "does not exist", you're either not in the repo root
+or you have an old ZIP snapshot. See "Get the code" above.
 
 It checks PowerShell, winget, Node, the AWS CLI and git, and prints the exact
 `winget` command for anything missing. Add `-Install` to let it install them
