@@ -44,9 +44,10 @@ try {
   const identity = JSON.parse(run("aws sts get-caller-identity --output json"));
   ok(`AWS credentials valid — account ${identity.Account}, as ${identity.Arn}`);
 } catch {
-  ready = problem("AWS credentials not working for the active profile. Fix with:");
-  console.log("      export AWS_PROFILE=kerbside-demo");
-  console.log("      aws sts get-caller-identity   # should succeed before re-running this");
+  ready = problem("AWS credentials aren't resolving. Any source works (profile, assume-role,");
+  console.log("    SSO, env vars, instance role) as long as this succeeds:");
+  console.log("      aws sts get-caller-identity");
+  console.log("    e.g. export AWS_PROFILE=kerbside-demo, or aws sso login --profile <name>");
 }
 
 if (BUCKET === "kerbside-demo-assets") {

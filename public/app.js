@@ -58,11 +58,11 @@ function interpret(message) {
   if (m.includes("could not load credentials") || m.includes("credential")) {
     return {
       title: "No AWS credentials",
-      body: "The server started but cannot authenticate to AWS.",
+      body: "The server started but cannot authenticate to AWS. If you are using temporary credentials, they may simply have expired.",
       hint: [
-        "Set your profile: <code>export AWS_PROFILE=kerbside-demo</code>",
-        "Check it works: <code>aws sts get-caller-identity</code>",
-        "Restart the server after changing the profile"
+        "Check they resolve: <code>aws sts get-caller-identity</code>",
+        "Refresh if expired: <code>aws sso login</code>, or re-assume the role",
+        "Restart the server afterwards"
       ]
     };
   }

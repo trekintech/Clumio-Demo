@@ -11,7 +11,7 @@ application, not a product demo.
 
 - Node 20 or later
 - An AWS sandbox account you don't mind corrupting data in
-- AWS CLI, configured with a named profile
+- AWS CLI, with working credentials
 - A Clumio tenant connected to that account
 
 The profile needs:
@@ -22,8 +22,16 @@ The profile needs:
 | S3 | `CreateBucket`, `HeadBucket`, `PutBucketVersioning`, `PutObject`, `GetObject`, `ListBucket`, `DeleteObject` |
 | STS | `GetCallerIdentity` |
 
-No credentials are read from or written to this repo. Everything comes from
-your AWS CLI profile.
+No credentials are read from or written to this repo. The clients are built
+with a region and nothing else, so they use the standard AWS SDK credential
+chain. An existing role is fine: an assume-role profile, SSO, exported
+environment variables, or an instance role all work. `npm run setup` prints
+the resolved ARN so you can check you're on the one you meant to use.
+
+If you're using temporary credentials, prefer a profile that lets the SDK
+refresh them itself (`role_arn` with `source_profile`, or an SSO profile)
+over pasting short-lived `AWS_SESSION_TOKEN` values into your shell. Pasted
+session credentials don't refresh, and they expire mid-demo without warning.
 
 ## Run it end to end
 
