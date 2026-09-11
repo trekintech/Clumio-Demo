@@ -1,156 +1,150 @@
-# S3 demo runbook — deletion vs corruption
+# S3 demo runbook: deletion vs corruption
 
-Two distinct S3 failure modes, two distinct recovery paths. They must stay
-separate on stage and in the app. Conflating them collapses the argument:
-deletion is an *availability* problem (CloudFront routes around it
-automatically), corruption is a *data* problem (nothing routes around wrong
-content — you have to recover the actual bytes). See `CLAUDE.md` → "S3
-failover design" for the narrative framing.
+Two failure modes, two recovery paths, and they must not be muddled on
+stage. Deletion is an availability problem and CloudFront routes around it
+on its own. Corruption is a data problem and nothing routes around wrong
+content, because the bytes themselves are wrong. See `CLAUDE.md` → "S3
+failover design" for the framing.
 
-## What is actually in the bucket
+## What's in the bucket
 
-Two different kinds of object, and the difference drives the whole demo:
+Three kinds of object, and the difference between them drives the whole
+demo:
 
-- `menu/<slug>/menu.json` — **load-bearing.** The published menu document the
-  storefront renders from. The menu is not in DynamoDB. No document means the
-  tenant cannot show a menu and therefore cannot take orders at all.
-- `menu/<slug>/<item>.svg` — menu artwork. Cosmetic; a missing or wrong image
-  is ugly but the tenant keeps trading.
-- `settlement/<slug>/latest.csv` — finance export, not on the critical path.
+- `menu/<slug>/menu.json` is the published menu document the storefront
+  renders from. The menu is not in DynamoDB. Lose this and the restaurant
+  can't show a menu, so it can't take orders.
+- `menu/<slug>/<item>.svg` is artwork. A missing or wrong image looks bad,
+  but the restaurant keeps trading.
+- `settlement/<slug>/latest.csv` is a finance export and isn't on the
+  critical path.
 
-So deleting `menu.json` is an outage, and corrupting an image is not. That
-asymmetry is the point of the two scenarios below.
+So deleting the menu document is an outage and corrupting an image isn't.
+That asymmetry is the reason there are two scenarios.
 
-## Scenario 1 — deletion (availability)
+## Build the origin group first
 
-```bash
-npm run s3-delete-incident
-```
+This repo doesn't create the distribution or the origin group. Build it by
+hand in the CloudFront console before you film:
 
-Hard-deletes everything under `menu/<slug>/` — **including `menu.json`** —
-plus the settlement CSV, for the three blast-radius tenants
-(`alma-kitchen`, `brick-lane-grill`, `corner-pantry`). S3 responds 403 or
-404 for those keys from then on.
+- **Primary origin:** the source S3 bucket (`KERBSIDE_BUCKET`).
+- **Secondary origin:** the Clumio Instant Access endpoint for that bucket's
+  protected copy.
+- **Failover criteria: 403 and 404, both.** Not one or the other. A delete
+  can surface as either, depending on bucket policy and whether the caller
+  can even list the key, so if you only tick one some deletions won't fail
+  over and the demo will look broken.
 
-- If the app is reading direct from S3 (`IMAGE_BASE_URL` unset), those three
-  tenants go **down**: the dashboard shows "Storefront down — menu
-  unavailable" and states plainly that the restaurant cannot take orders.
-  This is the no-CloudFront path, and it is the "before" half of the story.
-- If the app is reading through the CloudFront origin group, failover should
-  mean the menu document and artwork are served from the Clumio Instant
-  Access origin instead — the storefront keeps trading, with no visible
-  change and nobody touching anything. That's the clip.
+Failover isn't a sticky switch. CloudFront tries the primary on every
+request regardless of what happened last time, which is what makes the
+recovery automatic. Once the source objects are back, the app goes back to
+the primary with no manual step to perform or film.
 
-Worth showing both: run it once without `IMAGE_BASE_URL` to film three
-restaurants going dark, then again with the origin group in place to show
-the same deletion doing nothing at all.
-
-**Recovery:** nothing to do in Clumio during the outage — Instant Access is
-already serving reads. The actual recovery step is restoring the source
-bucket's objects. Because the origin group routes every request to the
-primary first, regardless of any prior failover, the app returns to the
-primary automatically the moment those objects reappear — there is no
-"switch back" step to perform or film.
-
-## Scenario 2 — overwrite / corruption (data)
-
-```bash
-npm run s3-corrupt-incident
-```
-
-Overwrites every menu **image** for the same three tenants in place — same
-key, new (visibly wrong) content. `menu.json` is deliberately left alone, so
-the tenants stay up and keep trading. S3 keeps returning 200 for every key.
-
-- CloudFront origin failover does **not** fire. There is no 403/404 to
-  trigger on — as far as CloudFront and the origin group are concerned,
-  nothing is wrong.
-- The gallery renders whatever comes back, which is the corrupted artwork,
-  on both the direct-S3 path and the CloudFront path. This is intentional:
-  it's the visual proof that failover doesn't help here.
-- The dashboard still reports the tenant **healthy** — green banner, assets
-  "all present" — while the customer is looking at garbage. Say this out
-  loud on stage: every error-code-based check passes, which is exactly why
-  an availability mechanism cannot catch a data problem.
-
-**Recovery:** roll back the object to the version that existed before the
-overwrite. This repo enables S3 bucket versioning at seed time
-(`scripts/seed.js`) specifically so a previous version exists to restore.
-The user framed this on-stage as **"Backtrack's version rollback"** — flag:
-that phrasing has *not* been verified the way the DynamoDB Backtrack claim
-in `CLAUDE.md` was (that one was checked against a specific Commvault blog
-post). Confirm the correct product name for S3 object-version recovery
-before this goes on stage; don't assume "Backtrack" covers S3 just because
-it covers DynamoDB.
-
-## CloudFront origin group (built in the console, not in code)
-
-This repo deliberately does not create the distribution or the origin
-group — build it by hand in the CloudFront console:
-
-- **Origin 1 (primary):** the source S3 bucket (`KERBSIDE_BUCKET`).
-- **Origin 2 (secondary):** the Clumio Instant Access endpoint for that
-  bucket's protected copy.
-- **Origin group failover criteria: 403 *and* 404, both.** Not just one —
-  a delete can surface as either depending on bucket policy and whether the
-  caller can even list the key, so the origin group has to treat both as
-  failover triggers or some deletes won't fail over.
-- Failover is one-directional per request, not a sticky switch: CloudFront
-  tries the primary on every request regardless of what happened on the
-  previous one. That's what makes recovery automatic — there is no manual
-  "point back at primary" step once the source bucket is restored.
-
-## Cache TTL warning
-
-CloudFront caches successful responses at the edge. If an object was
-fetched and cached *before* you run the deletion script, the cached copy
-keeps being served straight from the edge, unchanged, until its TTL
-expires — deletion produces **no visible effect** until then, and it will
-look like the demo did nothing.
-
-For the demo: set a short TTL on the menu-asset path (or invalidate the
-affected paths explicitly) before running `npm run s3-delete-incident`, so
-the next request actually reaches the origin group and you get to show the
-failover instead of a stale cache hit.
-
-## Tier constraint
-
-Instant Access is available on **Standard tier only**. It is not supported
-on SecureVault **Archive**. The RDS granular-retrieval capability in this
-repo uses Archive and its ~48 hour thaw window (see `CLAUDE.md` → Accuracy
-notes) — that's a separate tier with a separate recovery shape, which is
-why RDS cannot use this failover pattern and is told as an audit/compliance
-story instead of a fast-recovery one.
-
-## Local testing without CloudFront
-
-Leave `IMAGE_BASE_URL` unset. The server falls back to presigned S3 URLs
-read directly from the bucket, checks object existence itself, and the app
-renders the existing 404 tiles for anything missing. This lets you rehearse
-both incident scripts and watch `assetsMissing` change in the dashboard
-without the distribution existing yet.
-
-Once the origin group is live in the console, point the app at it:
+Then point the app at it and restart:
 
 ```bash
 export IMAGE_BASE_URL=https://<distribution-id>.cloudfront.net
 npm start
 ```
 
-In this mode the server does not check the source bucket at all — it trusts
-CloudFront completely, `assetsMissing` always reads 0, and there is no
-custom 404 tile. A genuine failure (both origins down) would show up as the
-browser's own broken-image icon, which is the honest signal in this mode —
-dressing it up would misrepresent what CloudFront is actually doing.
+With that set, the server stops checking the source bucket and trusts
+CloudFront completely. If both origins were genuinely down you'd get the
+browser's own broken-image icon, which is the honest signal. Dressing that
+up would misrepresent what CloudFront is doing.
+
+## Watch the cache
+
+CloudFront caches successful responses at the edge. If an object was fetched
+and cached before you run the deletion script, the edge keeps serving the
+cached copy until the TTL expires. The deletion will appear to do nothing
+and the demo will fall flat.
+
+Set a short TTL on the menu path, or invalidate the affected paths
+explicitly, before running the deletion. You want the next request to
+actually reach the origin group.
+
+## Scenario 1: deletion
+
+```bash
+npm run s3-delete-incident
+```
+
+Deletes everything under `menu/<slug>/`, including `menu.json`, plus the
+settlement CSV, for the three blast-radius tenants (`alma-kitchen`,
+`brick-lane-grill`, `corner-pantry`). S3 returns 403 or 404 for those keys
+from then on.
+
+Read straight from S3, with `IMAGE_BASE_URL` unset, those three restaurants
+go down. The dashboard says "Storefront down — menu unavailable" and spells
+out that they can't take orders. Read through the origin group, Instant
+Access serves the menu document instead, and nothing visibly happens at all.
+
+Film it both ways. Three restaurants going dark is the "before". The same
+command doing nothing is the "after".
+
+**Recovery.** There's nothing to do in Clumio while the outage is running,
+because Instant Access is already serving reads. The actual recovery is
+restoring the source objects, and the app returns to the primary on its own
+once they're back.
+
+## Scenario 2: overwrite
+
+```bash
+npm run s3-corrupt-incident
+```
+
+Overwrites the menu images in place, same keys, visibly wrong content. It
+leaves `menu.json` alone on purpose, so the restaurants stay up and keep
+trading. S3 returns 200 for every key.
+
+Failover doesn't fire, because there's no error code to fire on. As far as
+CloudFront is concerned nothing is wrong. The gallery renders whatever comes
+back, on both the direct path and through CloudFront, which is the visual
+proof that failover doesn't help here.
+
+Worth saying out loud: the dashboard still reports these tenants healthy.
+Green banner, assets all present, while the customer is looking at garbage.
+Every error-code-based check passes. That's precisely why an availability
+mechanism can't catch a data problem.
+
+**Recovery.** Roll the object back to the version from before the overwrite.
+The seed switches on bucket versioning so that version exists.
+
+One caveat before you narrate this: calling it "Backtrack's version
+rollback" hasn't been checked against documentation. The DynamoDB Backtrack
+claim in `CLAUDE.md` was verified against a specific Commvault blog post,
+but that verification doesn't carry over to S3. Confirm the correct product
+name for S3 object-version recovery before you say it on stage.
+
+## Tier constraint
+
+Instant Access is Standard tier only. It isn't supported on SecureVault
+Archive.
+
+That matters for the wider narrative, because the RDS capability in the
+three-part story depends on Archive and its thaw window, which is why it's
+told as an audit and compliance story rather than a fast-recovery one. The
+two sit on different tiers with different recovery shapes, so don't imply
+Instant Access could apply to the RDS scenario. (Note there's no RDS code in
+this repo yet.)
+
+## Rehearsing without CloudFront
+
+Leave `IMAGE_BASE_URL` unset. The server reads from the bucket directly and
+presigns image URLs itself, so you can run both incident scripts and watch
+the dashboard react without the distribution existing.
+
+This is genuinely useful, not just a fallback. It's how you film the "before"
+half of scenario 1.
 
 ## Filming the Instant Access phase
 
-There is deliberately no "degraded" or read-only indicator in the app for
-this phase. Instant Access being read-only is a property of the backup copy
-CloudFront is failing over to, not of this app: DynamoDB (where order data
-lives) is untouched by the S3 incident, and the app has no S3-write path in
-its own UI to begin with. What you're actually filming is the dashboard
-looking completely normal — menu images, order counts, the health banner —
-while the deletion has already happened behind it. The absence of any
-visible change *is* the shot; narrate that live rather than adding UI to
-announce it.
+There's no "degraded" or read-only indicator in the app for this phase, by
+design. Instant Access being read-only is a property of the backup copy
+CloudFront fails over to, not of this application. Order data lives in
+DynamoDB and the S3 incident doesn't touch it, and the app has no S3 write
+path in its UI anyway.
+
+What you're filming is a dashboard that looks entirely normal while the
+deletion has already happened behind it. The absence of any visible change
+is the shot. Narrate that rather than adding UI to announce it.
