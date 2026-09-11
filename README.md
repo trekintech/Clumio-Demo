@@ -46,12 +46,21 @@ Run every command from the repo root, the folder containing `package.json`.
 
 ## Prerequisites
 
-You need four things:
+Genuinely just:
 
-- Node 20 or later
-- AWS CLI v2, with credentials that resolve
-- An AWS sandbox account you don't mind corrupting data in
-- A Clumio tenant connected to that account
+- **Node 20 or later**
+- **An AWS sandbox account** you don't mind corrupting data in, with
+  credentials configured somehow (any profile, SSO session, assume-role
+  setup, environment variables or instance role will do)
+- **A Clumio tenant** connected to that account
+
+The AWS CLI is **optional**. Everything here talks to AWS through the SDK,
+which reads your profiles and SSO sessions directly. You only need the CLI if
+you want `npm run setup` to create a brand new SSO login or key pair for you.
+
+Then run `npm run setup`, which handles the rest and asks when it needs a
+decision. The sections below are reference material for doing any of it by
+hand.
 
 ### Install the tooling
 
@@ -191,23 +200,22 @@ credentials don't refresh, and they expire mid-demo without warning.
 
 ### Check the role can actually do the work
 
-Credentials resolving is not the same as having permission.
-`aws sts get-caller-identity` succeeds for almost any role, including ones
-that can't create a table or write an object. To find out before you're
-halfway through seeding:
+`npm run setup` does this as step 4. To re-run it on its own later:
 
 ```
 npm run check-access
 ```
 
-It reports the identity it resolved, which profile is active and what else
-is available, then probes each permission the demo needs and maps any denial
-to the exact IAM action to add. Where the table or bucket already exists it
-does a real write-and-delete round trip, so the answer isn't a guess. Add
-`-- --read-only` to skip the write probes.
+Credentials resolving is not the same as having permission: a role can
+authenticate perfectly and still be unable to create a table or write an
+object. This probes each permission the demo needs and maps any denial to the
+exact IAM action, printing a policy you can paste straight in. Where the
+table or bucket already exists it does a real write-and-delete round trip, so
+the answer isn't inferred from policy. Add `-- --read-only` to skip the write
+probes.
 
-It uses the AWS SDK rather than the CLI on purpose, because that's the same
-credential path `server.js` and the seed use, and the two can resolve
+It goes through the AWS SDK rather than the CLI on purpose: that's the same
+credential path `server.js` and the seed take, and the two can resolve
 differently.
 
 Permissions needed:
@@ -238,29 +246,30 @@ Everything else (`npm run ...`) is identical on both.
 
 ## Run it end to end
 
-### 1. Configure
+### 1. Setup
 
-```bash
+```
 npm run setup
 ```
 
-That's genuinely the whole step. `npm run setup` installs dependencies, then
-walks through everything that could stop you cold, and where something needs
-a decision only you can make, it asks and carries on rather than dumping you
-back to the prompt:
+One command, five steps, and it asks you whenever it needs a decision rather
+than sending you off to run something else:
 
-- **AWS CLI missing?** Offers to install it (winget on Windows, Homebrew on
-  macOS; on Linux it shows the command instead of running an installer
-  unattended).
-- **Credentials not resolving?** Lists your existing profiles if you have
-  any, or offers to set up SSO or access keys right there — you get the AWS
-  CLI's own real prompts, browser flow included, not a re-implementation.
-- **Bucket still the default?** Prompts for a name and checks it's validly
-  formed. Bucket names are globally unique, so it has to be your own.
+1. **Dependencies** — installed quietly.
+2. **Credentials** — if none resolve, it lists the profiles you already have
+   and offers to use one, or to sign in with SSO, or to enter access keys.
+   Picking an existing profile that needs an SSO refresh offers to do that
+   too.
+3. **Bucket name** — prompts for one if you're still on the default, and
+   checks it's validly formed. S3 names are globally unique so it has to be
+   yours.
+4. **Permissions** — probes what the role can actually do. If anything is
+   denied it prints a ready-to-paste IAM policy, then offers to re-check once
+   you've added it, so you can fix and retry without restarting.
+5. **Seed** — offers to load the data there and then: a small 50-tenant
+   estate for rehearsing, or the full 4,127-tenant one for recording.
 
-If you'd rather set things up yourself first, that still works — with a
-profile and bucket name already exported, `npm run setup` skips straight to
-confirming they're fine:
+If you already have things set up, it just confirms them and moves on:
 
 ```bash
 export AWS_PROFILE=<your-existing-profile>
@@ -274,20 +283,23 @@ $env:KERBSIDE_BUCKET = "kerbside-demo-assets-<something-unique>"
 npm run setup
 ```
 
-At the end it prints the `export`/`$env:` lines for whatever it resolved —
-paste those into any new terminal, since a value chosen inside `npm run
-setup` only applies to that one process; it can't reach back and change your
-shell's environment. It'll also offer to run `npm run check-access`
-immediately, using what it just resolved.
+Anything you choose inside `npm run setup` applies to that run only — a
+program can't change its parent shell's environment. So it prints the
+`export`/`$env:` lines at the end; paste those into any new terminal before
+running `npm start` there.
 
-In a non-interactive shell (CI, or piped output) it skips every prompt and
-reports the same information as plain read-only text, exactly as before —
-it never sits waiting for input that can't arrive.
+Non-interactive shells (CI, piped output, or `--yes`) skip every prompt and
+report the same findings as plain text, so it can never sit waiting for input
+that will never arrive.
 
-`npm run check-access` proves the role can do the actual work — credentials
-resolving is not the same as having permission — and names the exact IAM
-action behind any denial. Both commands are safe to re-run as often as you
-like; neither writes anything to AWS.
+To re-check permissions later without the full flow:
+
+```
+npm run check-access
+```
+
+Neither command writes anything to AWS beyond a probe object it immediately
+deletes, and both are safe to re-run.
 
 ### 2. Rehearse with a small estate
 
