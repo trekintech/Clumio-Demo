@@ -93,7 +93,7 @@ try {
       console.log("    If it's an SSO profile you may need to sign in first:");
       console.log(`      aws sso login --profile ${profiles[0]}`);
     } else {
-      console.log("      (none configured — see README Prerequisites)");
+      console.log("      (none configured  -  see README Prerequisites)");
     }
   } catch {
     console.log("      (couldn't list profiles; is the AWS CLI installed?)");
@@ -131,10 +131,10 @@ let tableExists = false;
 try {
   await rawDdb.send(new DescribeTableCommand({ TableName: TABLE }));
   tableExists = true;
-  ok(`DescribeTable — table ${TABLE} exists`);
+  ok(`DescribeTable  -  table ${TABLE} exists`);
 } catch (err) {
   if (absent(err)) {
-    ok(`DescribeTable — allowed (table ${TABLE} doesn't exist yet, which is fine)`);
+    ok(`DescribeTable  -  allowed (table ${TABLE} doesn't exist yet, which is fine)`);
   } else if (denied(err)) {
     bad("DescribeTable denied", "dynamodb:DescribeTable");
   } else {
@@ -144,7 +144,7 @@ try {
 
 try {
   await rawDdb.send(new ListTablesCommand({ Limit: 1 }));
-  ok("ListTables — allowed");
+  ok("ListTables  -  allowed");
 } catch (err) {
   if (denied(err)) warn("ListTables denied (not required, but usually granted alongside)");
 }
@@ -152,10 +152,10 @@ try {
 if (tableExists) {
   try {
     await rawDdb.send(new DescribeContinuousBackupsCommand({ TableName: TABLE }));
-    ok("DescribeContinuousBackups — allowed (PITR readable)");
+    ok("DescribeContinuousBackups  -  allowed (PITR readable)");
   } catch (err) {
     if (denied(err)) {
-      warn("DescribeContinuousBackups denied — UpdateContinuousBackups likely denied too");
+      warn("DescribeContinuousBackups denied  -  UpdateContinuousBackups likely denied too");
       missing.add("dynamodb:UpdateContinuousBackups");
     }
   }
@@ -170,7 +170,7 @@ if (tableExists) {
           }
         })
       );
-      ok("BatchWriteItem — allowed (wrote a probe item)");
+      ok("BatchWriteItem  -  allowed (wrote a probe item)");
       await ddb.send(
         new BatchWriteCommand({
           RequestItems: { [TABLE]: [{ DeleteRequest: { Key: { pk: probePk, sk: "PROBE" } } }] }
@@ -178,7 +178,7 @@ if (tableExists) {
       );
       info("Probe item removed.");
     } catch (err) {
-      if (denied(err)) bad("BatchWriteItem denied — the seed cannot write", "dynamodb:BatchWriteItem");
+      if (denied(err)) bad("BatchWriteItem denied  -  the seed cannot write", "dynamodb:BatchWriteItem");
       else bad(`BatchWriteItem failed: ${err.name}`);
     }
   }
@@ -195,10 +195,10 @@ let bucketExists = false;
 try {
   await s3.send(new HeadBucketCommand({ Bucket: BUCKET }));
   bucketExists = true;
-  ok(`HeadBucket — bucket ${BUCKET} exists and is reachable`);
+  ok(`HeadBucket  -  bucket ${BUCKET} exists and is reachable`);
 } catch (err) {
   if (absent(err)) {
-    ok(`HeadBucket — allowed (bucket ${BUCKET} doesn't exist yet, which is fine)`);
+    ok(`HeadBucket  -  allowed (bucket ${BUCKET} doesn't exist yet, which is fine)`);
   } else if (denied(err)) {
     bad(`HeadBucket returned 403 for ${BUCKET}`);
     console.log("      Either the role lacks s3:ListBucket, or this name belongs to");
@@ -213,7 +213,7 @@ try {
 if (bucketExists) {
   try {
     await s3.send(new ListObjectsV2Command({ Bucket: BUCKET, MaxKeys: 1 }));
-    ok("ListBucket — allowed");
+    ok("ListBucket  -  allowed");
   } catch (err) {
     if (denied(err)) bad("ListBucket denied", "s3:ListBucket");
   }
@@ -221,10 +221,10 @@ if (bucketExists) {
   try {
     const v = await s3.send(new GetBucketVersioningCommand({ Bucket: BUCKET }));
     if (v.Status === "Enabled") ok("Bucket versioning enabled (corruption scenario can roll back)");
-    else warn("Bucket versioning not enabled yet — `npm run seed` turns it on");
+    else warn("Bucket versioning not enabled yet  -  `npm run seed` turns it on");
   } catch (err) {
     if (denied(err)) {
-      warn("GetBucketVersioning denied — PutBucketVersioning likely denied too");
+      warn("GetBucketVersioning denied  -  PutBucketVersioning likely denied too");
       missing.add("s3:PutBucketVersioning");
     }
   }
@@ -235,12 +235,12 @@ if (bucketExists) {
       await s3.send(
         new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: "preflight", ContentType: "text/plain" })
       );
-      ok("PutObject — allowed (wrote a probe object)");
+      ok("PutObject  -  allowed (wrote a probe object)");
       await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
-      ok("DeleteObject — allowed");
+      ok("DeleteObject  -  allowed");
       info("Probe object removed.");
     } catch (err) {
-      if (denied(err)) bad("PutObject/DeleteObject denied — the seed cannot upload", "s3:PutObject");
+      if (denied(err)) bad("PutObject/DeleteObject denied  -  the seed cannot upload", "s3:PutObject");
       else bad(`Write probe failed: ${err.name}`);
     }
   }

@@ -114,6 +114,11 @@ aws --version    # want aws-cli/2.x
 
 ### Give the AWS CLI credentials
 
+**`npm run setup`, further down, can do everything in this section for you**
+interactively — it detects what's missing and offers to run it. Read on if
+you'd rather do it by hand first, or you're troubleshooting something it
+couldn't resolve on its own.
+
 **If you already have a working profile or role, use it.** Nothing here needs
 a dedicated one. Check what you've already got:
 
@@ -235,35 +240,54 @@ Everything else (`npm run ...`) is identical on both.
 
 ### 1. Configure
 
-Use whichever profile you already have. `AWS_PROFILE` can be left out
-entirely if your default credentials are the ones you want.
+```bash
+npm run setup
+```
+
+That's genuinely the whole step. `npm run setup` installs dependencies, then
+walks through everything that could stop you cold, and where something needs
+a decision only you can make, it asks and carries on rather than dumping you
+back to the prompt:
+
+- **AWS CLI missing?** Offers to install it (winget on Windows, Homebrew on
+  macOS; on Linux it shows the command instead of running an installer
+  unattended).
+- **Credentials not resolving?** Lists your existing profiles if you have
+  any, or offers to set up SSO or access keys right there — you get the AWS
+  CLI's own real prompts, browser flow included, not a re-implementation.
+- **Bucket still the default?** Prompts for a name and checks it's validly
+  formed. Bucket names are globally unique, so it has to be your own.
+
+If you'd rather set things up yourself first, that still works — with a
+profile and bucket name already exported, `npm run setup` skips straight to
+confirming they're fine:
 
 ```bash
 export AWS_PROFILE=<your-existing-profile>
-export AWS_REGION=eu-west-2
 export KERBSIDE_BUCKET=kerbside-demo-assets-<something-unique>
 npm run setup
-npm run check-access
 ```
 
 ```powershell
 $env:AWS_PROFILE = "<your-existing-profile>"
-$env:AWS_REGION = "eu-west-2"
 $env:KERBSIDE_BUCKET = "kerbside-demo-assets-<something-unique>"
 npm run setup
-npm run check-access
 ```
 
-Bucket names are globally unique, so pick your own.
+At the end it prints the `export`/`$env:` lines for whatever it resolved —
+paste those into any new terminal, since a value chosen inside `npm run
+setup` only applies to that one process; it can't reach back and change your
+shell's environment. It'll also offer to run `npm run check-access`
+immediately, using what it just resolved.
 
-`npm run setup` installs dependencies and checks local tooling: Node version,
-AWS CLI present, credentials resolving at all, and that you changed the
-bucket name off the default. It doesn't touch AWS.
+In a non-interactive shell (CI, or piped output) it skips every prompt and
+reports the same information as plain read-only text, exactly as before —
+it never sits waiting for input that can't arrive.
 
-`npm run check-access` then proves the role can do the actual work, and names
-the exact IAM action behind any denial. Between them they catch the things
-that otherwise surface halfway through a seed. Both are safe to re-run as
-often as you like.
+`npm run check-access` proves the role can do the actual work — credentials
+resolving is not the same as having permission — and names the exact IAM
+action behind any denial. Both commands are safe to re-run as often as you
+like; neither writes anything to AWS.
 
 ### 2. Rehearse with a small estate
 
