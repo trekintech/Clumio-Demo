@@ -282,16 +282,15 @@ $env:KERBSIDE_BUCKET = "my-own-bucket-name"
 npm run setup
 ```
 
-**Prompts are optional.** Run through `npm run` and it works automatically,
-choosing defaults and reporting them — npm pipes its output, so questions
-aren't possible there. If you'd rather be asked before it picks a bucket name
-or seeds, run it directly instead:
+**It never asks you anything by default**, so it can't sit waiting on a
+prompt you can't see. It decides, tells you what it decided, and moves on. If
+you'd rather be asked before it picks a bucket name or seeds:
 
 ```
-node scripts/setup.js
+node scripts/setup.js --interactive
 ```
 
-Either way it never blocks waiting for input.
+That needs a real terminal. Through `npm run` it stays automatic either way.
 
 To re-check permissions later without the full flow:
 

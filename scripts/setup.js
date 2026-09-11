@@ -1,11 +1,9 @@
-// One guided setup that gets on with it: installs dependencies, resolves
+// One setup that gets on with it: installs dependencies, resolves
 // credentials, picks and creates the S3 bucket, verifies permissions, and
-// offers to seed.
+// tells you exactly what to run next.
 //
-// Everything has a sensible automatic default, so it never waits on input and
-// never hangs. Run `node scripts/setup.js` directly (rather than via npm) if
-// you want it to ask before choosing - npm pipes stdio, so prompts are
-// unavailable through `npm run`.
+// Fully automatic by default - it never waits for input, so it cannot hang.
+// Pass --interactive (or -i) to be asked before it chooses anything.
 import { execSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { CreateBucketCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
@@ -49,9 +47,10 @@ const interactive = canPrompt();
 console.log("\nKerbside setup");
 console.log(
   interactive
-    ? "Interactive: it'll ask before making choices."
-    : "Automatic: it'll choose sensible defaults and tell you what it picked."
+    ? "Interactive mode: it'll ask before making choices."
+    : "Automatic: it decides everything itself and tells you what it picked."
 );
+if (!interactive) console.log("(want to be asked instead? run: node scripts/setup.js --interactive)");
 
 // ------------------------------------------------------- 1. dependencies
 
@@ -145,15 +144,14 @@ if (bucket === "kerbside-demo-assets") {
   console.log(`     "${bucket}" is the shared default and will collide - S3 names are global.`);
 
   if (interactive) {
-    const answer = await ask(`  Bucket name to use [${suggested}]: `);
-    bucket = answer || suggested;
+    bucket = (await ask(`  Bucket name to use, or blank for ${suggested}:`)) || suggested;
     while (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) {
       console.log("     Lowercase letters, numbers, dots and hyphens only.");
-      bucket = (await ask(`  Bucket name to use [${suggested}]: `)) || suggested;
+      bucket = (await ask(`  Bucket name to use, or blank for ${suggested}:`)) || suggested;
     }
   } else {
     bucket = suggested;
-    console.log(`     Picked a unique name for you: ${bucket}`);
+    console.log(`     Picked a unique name automatically: ${bucket}`);
   }
 }
 
@@ -271,7 +269,9 @@ if (seedChoice !== "no") {
 }
 
 closePrompt();
-console.log("  Everything checks out. Next:");
+console.log("  Everything checks out.");
+console.log("\n  Next, load the demo data. It prints progress as it goes");
+console.log("  (per tenant, then batch percentages) and takes a few minutes:");
 console.log("     npm run seed     # load the demo data");
 console.log("     npm start        # then open http://localhost:5173");
 console.log("\n  To rehearse with a small estate first:");

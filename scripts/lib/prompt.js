@@ -1,24 +1,25 @@
-// Optional prompting.
+// Prompting is strictly opt-in, via --interactive.
 //
-// Deliberately strict: only prompt when stdin is genuinely a TTY. An earlier
-// version tried to open the console device directly (CONIN$ / dev/tty) so that
-// `npm run` on Windows could still prompt - npm pipes stdio through npm.ps1,
-// so isTTY is false there. Opening CONIN$ succeeds but never delivers input,
-// so the script decided it could prompt and then hung forever. Not worth it.
+// Two separate attempts at auto-detecting "can I ask a question here?" both
+// hung on Windows under `npm run`:
+//   1. Opening CONIN$ directly succeeds but never delivers input.
+//   2. stdin.isTTY can be true while stdout is a pipe, and readline writes its
+//      prompt without a trailing newline - so the question sits unflushed in
+//      the buffer and the user sees a frozen screen with no question on it.
 //
-// Instead: every caller must have a sensible default, prompting is a nicety,
-// and nothing ever blocks. Running `node scripts/setup.js` directly (rather
-// than through npm) does give a real TTY if you want the questions.
+// Rather than keep guessing, the default is now fully automatic: every caller
+// has a sensible default and nothing is ever asked. Pass --interactive (or
+// -i) to be asked instead. Questions are printed with console.log, so they
+// always end in a newline and always appear.
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 
 let rl = null;
 
 export function canPrompt() {
-  if (process.env.CI || process.argv.includes("--yes") || process.argv.includes("--non-interactive")) {
-    return false;
-  }
-  return Boolean(stdin.isTTY);
+  if (process.env.CI) return false;
+  const wants = process.argv.includes("--interactive") || process.argv.includes("-i");
+  return wants && Boolean(stdin.isTTY);
 }
 
 function ensure() {
@@ -28,27 +29,29 @@ function ensure() {
 
 export async function ask(question, fallback = "") {
   if (!canPrompt()) return fallback;
-  const answer = await ensure().question(question);
+  // Newline-terminated, so it can never be stuck in a block buffer.
+  console.log(question);
+  const answer = await ensure().question("> ");
   return answer.trim();
 }
 
 export async function confirm(question, defaultYes = true) {
   if (!canPrompt()) return defaultYes;
-  const answer = (await ask(`${question}${defaultYes ? " [Y/n] " : " [y/N] "}`)).toLowerCase();
+  const answer = (await ask(`${question}${defaultYes ? " [Y/n]" : " [y/N]"}`)).toLowerCase();
   if (!answer) return defaultYes;
   return answer.startsWith("y");
 }
 
 export async function choose(question, options) {
   if (!canPrompt()) return options[0].value;
-  console.log(`\n${question}`);
-  options.forEach((o, i) => console.log(`    ${i + 1}) ${o.label}`));
   while (true) {
-    const answer = await ask("  Choice: ");
+    console.log(question);
+    options.forEach((o, i) => console.log(`    ${i + 1}) ${o.label}`));
+    const answer = await ask("Choose a number:");
     if (!answer) return options[0].value;
     const n = Number(answer);
     if (Number.isInteger(n) && n >= 1 && n <= options.length) return options[n - 1].value;
-    console.log("    Pick one of the numbers listed.");
+    console.log("  Not one of the options - try again.");
   }
 }
 
