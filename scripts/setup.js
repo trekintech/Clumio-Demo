@@ -4,21 +4,16 @@
 //
 // Fully automatic by default - it never waits for input, so it cannot hang.
 // Pass --interactive (or -i) to be asked before it chooses anything.
+// IMPORTANT: only Node built-ins and dependency-free local files may be
+// imported at the top of this file. This script is what installs the
+// dependencies, so anything importing the AWS SDK here would crash on a fresh
+// clone before the install ever ran. The SDK-backed modules are imported
+// dynamically further down, once `npm install` has finished.
 import { execSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { CreateBucketCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
 import { REGION, TABLE, BUCKET } from "../config.js";
 import { setEnv, isWindows } from "./env-syntax.js";
 import { ask, confirm, choose, canPrompt, closePrompt } from "./lib/prompt.js";
-import {
-  listProfiles,
-  credentialsWork,
-  probeAccess,
-  policyDocument,
-  clientsFor,
-  denied,
-  absent
-} from "./lib/aws-probe.js";
 import { writeLocalConfig, LOCAL_CONFIG_PATH } from "./lib/local-config.js";
 
 if (isWindows()) {
@@ -71,6 +66,11 @@ else
     isWindows() ? "winget install --exact --id OpenJS.NodeJS.LTS" : "brew install node",
     "Then open a new terminal and run: npm run setup"
   ]);
+
+// Safe to load the SDK-backed modules now that dependencies are present.
+const { CreateBucketCommand, HeadBucketCommand } = await import("@aws-sdk/client-s3");
+const { listProfiles, credentialsWork, probeAccess, policyDocument, clientsFor, denied, absent } =
+  await import("./lib/aws-probe.js");
 
 // -------------------------------------------------------- 2. credentials
 

@@ -7,6 +7,7 @@
   "scripts": {
     "prestart": "node scripts/require-install.js",
     "start": "node server.js",
+    "presetup": "node scripts/lib/check-bootstrap.js",
     "setup": "node scripts/setup.js",
     "setup:windows": "powershell -ExecutionPolicy Bypass -File scripts/setup-windows.ps1",
     "precheck-access": "node scripts/require-install.js",
