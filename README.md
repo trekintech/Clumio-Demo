@@ -341,7 +341,26 @@ It also switches on DynamoDB point-in-time recovery, so you have the native
 comparison ready if someone challenges you from the floor, and S3 bucket
 versioning, which the corruption scenario needs.
 
-Budget a few minutes. Progress is logged as it goes.
+Budget a few minutes. Progress is logged as it goes: a line per named tenant,
+then a percentage roughly every 10% of the synthetic batches.
+
+DynamoDB throws transient 500s and throttling under sustained write load, so
+batches retry with exponential backoff. If a seed does still fail part way,
+**re-running is safe** — every write overwrites by key, so nothing duplicates:
+
+```
+npm run seed
+```
+
+If it repeatedly fails at the same point, ease off the write rate:
+
+```bash
+SEED_CONCURRENCY=8 npm run seed
+```
+
+```powershell
+$env:SEED_CONCURRENCY = "8"; npm run seed
+```
 
 ### 4. Take a Clumio backup
 

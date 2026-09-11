@@ -207,13 +207,59 @@ async function ensureBucket() {
   }
 }
 
+// DynamoDB returns transient 500s ("Internal server error") and throttling
+// under sustained concurrent load, which is precisely what seeding does. The
+// SDK retries some of this, but a 500 can still surface here and would
+// otherwise abandon the whole run - losing an hour's writes at 90%.
+const TRANSIENT = new Set([
+  "InternalServerError",
+  "InternalServerErrorException",
+  "ServiceUnavailable",
+  "ThrottlingException",
+  "ProvisionedThroughputExceededException",
+  "RequestLimitExceeded",
+  "TimeoutError",
+  "NetworkingError",
+  "ECONNRESET",
+  "EPIPE"
+]);
+
+const isTransient = (err) =>
+  TRANSIENT.has(err.name) ||
+  TRANSIENT.has(err.code) ||
+  err.$retryable?.throttling === true ||
+  (err.$metadata?.httpStatusCode >= 500 && err.$metadata?.httpStatusCode < 600);
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Exponential backoff with jitter; jitter matters because 24 workers failing
+// together would otherwise retry in lockstep and re-trigger the throttle.
+const backoff = (attempt) => Math.min(8000, 2 ** attempt * 100) * (0.5 + Math.random());
+
 async function writeRawBatch(items) {
   let chunk = items.map((Item) => ({ PutRequest: { Item } }));
+  let attempt = 0;
+
   while (chunk.length) {
-    const res = await ddb.send(
-      new BatchWriteCommand({ RequestItems: { [TABLE]: chunk } })
-    );
-    chunk = res.UnprocessedItems?.[TABLE] || [];
+    try {
+      const res = await ddb.send(new BatchWriteCommand({ RequestItems: { [TABLE]: chunk } }));
+      const leftover = res.UnprocessedItems?.[TABLE] || [];
+      if (leftover.length === chunk.length) {
+        // Nothing got through: we're being throttled, so back off before
+        // retrying rather than spinning on it.
+        attempt++;
+        if (attempt > 12) throw new Error(`Gave up after ${attempt} throttled attempts`);
+        await sleep(backoff(attempt));
+      } else {
+        attempt = 0;
+      }
+      chunk = leftover;
+    } catch (err) {
+      if (!isTransient(err)) throw err;
+      attempt++;
+      if (attempt > 12) throw err;
+      await sleep(backoff(attempt));
+    }
   }
 }
 
@@ -421,6 +467,13 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("\nSeed failed:", err.message);
+  console.error(`\nSeed failed: ${err.message}`);
+  console.error("\nRe-running is safe: every write overwrites by key, so nothing");
+  console.error("duplicates and already-seeded tenants are simply rewritten.");
+  console.error("  npm run seed");
+  console.error("\nIf it keeps failing at the same point, ease off the write rate:");
+  console.error(
+    `  ${process.platform === "win32" ? '$env:SEED_CONCURRENCY = "8"; npm run seed' : "SEED_CONCURRENCY=8 npm run seed"}`
+  );
   process.exit(1);
 });
