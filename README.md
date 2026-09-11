@@ -74,8 +74,28 @@ aws --version    # want aws-cli/2.x
 
 ### Give the AWS CLI credentials
 
-Any source in the standard credential chain works. Pick whichever matches
-how your account is set up, then confirm with the same command at the end.
+**If you already have a working profile or role, use it.** Nothing here needs
+a dedicated one. Check what you've already got:
+
+```
+aws configure list-profiles
+aws sts get-caller-identity
+```
+
+If that second command prints an account and an ARN, you're already
+authenticated and can skip to the permission check below. To use a specific
+existing profile:
+
+```bash
+export AWS_PROFILE=<existing-profile>     # macOS / Linux
+```
+
+```powershell
+$env:AWS_PROFILE = "<existing-profile>"   # Windows PowerShell
+```
+
+The sections below are only for setting up access you don't already have.
+Pick whichever matches how your account works.
 
 **IAM Identity Center / SSO** (most common for role-based access):
 
@@ -124,13 +144,39 @@ its own (`role_arn` with `source_profile`, or an SSO profile) over pasting
 short-lived `AWS_SESSION_TOKEN` values into your shell. Pasted session
 credentials don't refresh, and they expire mid-demo without warning.
 
-### Permissions the role needs
+### Check the role can actually do the work
+
+Credentials resolving is not the same as having permission.
+`aws sts get-caller-identity` succeeds for almost any role, including ones
+that can't create a table or write an object. To find out before you're
+halfway through seeding:
+
+```
+npm run check-access
+```
+
+It reports the identity it resolved, which profile is active and what else
+is available, then probes each permission the demo needs and maps any denial
+to the exact IAM action to add. Where the table or bucket already exists it
+does a real write-and-delete round trip, so the answer isn't a guess. Add
+`-- --read-only` to skip the write probes.
+
+It uses the AWS SDK rather than the CLI on purpose, because that's the same
+credential path `server.js` and the seed use, and the two can resolve
+differently.
+
+Permissions needed:
 
 | Service | Actions |
 |---|---|
 | DynamoDB | `CreateTable`, `DescribeTable`, `UpdateContinuousBackups`, `BatchWriteItem`, `Query` |
 | S3 | `CreateBucket`, `HeadBucket`, `PutBucketVersioning`, `PutObject`, `GetObject`, `ListBucket`, `DeleteObject` |
 | STS | `GetCallerIdentity` |
+
+Before the table and bucket exist, the create and write actions can't be
+probed. `check-access` says so rather than implying a clean bill of health.
+Those are exercised in the first seconds of `npm run seed`, which fails fast
+and harmlessly if any are denied.
 
 ### A note on shell syntax
 
@@ -149,26 +195,35 @@ Everything else (`npm run ...`) is identical on both.
 
 ### 1. Configure
 
+Use whichever profile you already have. `AWS_PROFILE` can be left out
+entirely if your default credentials are the ones you want.
+
 ```bash
-export AWS_PROFILE=kerbside-demo
+export AWS_PROFILE=<your-existing-profile>
 export AWS_REGION=eu-west-2
 export KERBSIDE_BUCKET=kerbside-demo-assets-<something-unique>
 npm run setup
+npm run check-access
 ```
 
 ```powershell
-$env:AWS_PROFILE = "kerbside-demo"
+$env:AWS_PROFILE = "<your-existing-profile>"
 $env:AWS_REGION = "eu-west-2"
 $env:KERBSIDE_BUCKET = "kerbside-demo-assets-<something-unique>"
 npm run setup
+npm run check-access
 ```
 
-Bucket names are globally unique, so pick your own. `npm run setup` installs
-dependencies and checks the things that tend to bite during a live session:
-Node version, AWS CLI present, credentials actually resolving, and that you
-changed the bucket name off the default. It fails loudly with the fix rather
-than letting you find out halfway through seeding. It doesn't touch AWS, so
-re-run it as often as you like.
+Bucket names are globally unique, so pick your own.
+
+`npm run setup` installs dependencies and checks local tooling: Node version,
+AWS CLI present, credentials resolving at all, and that you changed the
+bucket name off the default. It doesn't touch AWS.
+
+`npm run check-access` then proves the role can do the actual work, and names
+the exact IAM action behind any denial. Between them they catch the things
+that otherwise surface halfway through a seed. Both are safe to re-run as
+often as you like.
 
 ### 2. Rehearse with a small estate
 

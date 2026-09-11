@@ -85,8 +85,9 @@ if (IMAGE_BASE_URL) {
 
 console.log();
 if (ready) {
-  console.log("All checks passed. Next:");
-  console.log("  npm run seed && npm start");
+  console.log("Tooling and credentials look fine. Next:");
+  console.log("  npm run check-access    # proves the role can actually do the work");
+  console.log("  npm run seed");
 } else {
   console.log("Fix the item(s) above, then re-run: npm run setup");
   process.exit(1);

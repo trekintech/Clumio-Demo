@@ -8,6 +8,7 @@
     "start": "node server.js",
     "setup": "node scripts/setup.js",
     "setup:windows": "powershell -ExecutionPolicy Bypass -File scripts/setup-windows.ps1",
+    "check-access": "node scripts/check-access.js",
     "seed": "node scripts/seed.js",
     "bad-deploy": "node scripts/bad-deploy.js",
     "s3-delete-incident": "node scripts/s3-delete-incident.js",

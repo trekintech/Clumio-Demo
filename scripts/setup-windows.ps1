@@ -149,8 +149,13 @@ if ($script:Ready) {
     Write-Cmd '$env:AWS_REGION = "eu-west-2"'
     Write-Cmd '$env:KERBSIDE_BUCKET = "kerbside-demo-assets-<something-unique>"'
     Write-Host ""
-    Write-Host "Then run the cross-platform check, which goes deeper:"
+    Write-Host "If you already have a working AWS profile, use that instead of making"
+    Write-Host "a new one. See what you have with:"
+    Write-Cmd "aws configure list-profiles"
+    Write-Host ""
+    Write-Host "Then run the cross-platform checks, which go deeper:"
     Write-Cmd "npm run setup"
+    Write-Cmd "npm run check-access"
     exit 0
 } else {
     Write-Host "Fix the items marked [!!] above, open a new terminal, then re-run this script." -ForegroundColor Yellow
