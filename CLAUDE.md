@@ -48,10 +48,14 @@ period of **up to 48 hours**. It is therefore an *audit and compliance* story,
 not a fast-recovery story. Do not write copy anywhere in this repo that implies
 RDS query is instant.
 
-S3 access mechanics and timings had not been verified against current
-documentation at the time this repo was written. Do not add specific RTO numbers
-or timing claims to the README, the UI, or anything else without checking the
-docs first.
+S3 Instant Access mechanics were confirmed by the presenter in September 2026:
+it provides a **read-only S3 access point**, usable as a CloudFront origin with
+OAC, and it stays available long enough for a demo. That came from the
+presenter's own console, not from documentation, so treat it as reliable for
+this demo and still worth re-checking before making public claims.
+
+Timings remain unverified. Do not add RTO numbers or duration claims to the
+README, the UI, or anywhere else without checking the docs first.
 
 The DynamoDB and Backtrack claims were verified against the Commvault blog post
 on Clumio Backtrack for DynamoDB (August 2025).
@@ -184,22 +188,42 @@ would silently reduce the S3 scenario back to a cosmetic one.
 
 ## S3 failover design
 
-The S3 clip uses a CloudFront origin group in front of the source bucket, not
-a manual origin flip: source bucket as primary, a Clumio Instant Access
-endpoint as secondary, failover criteria set to **403 and 404, both**. The
-distribution and origin group are built by hand in the CloudFront console —
-deliberately not created in code, the same way the RDS and DynamoDB Clumio
-configuration isn't — see `docs/cloudfront-setup.md` for the exact console
-steps, the cache-TTL warning, and the tier constraint.
+The S3 clip puts CloudFront in front of the source bucket: bucket as primary
+origin, a Clumio Instant Access access point (read-only, fronted with OAC) as
+secondary, failover criteria set to **403 and 404, both**. Nothing in this
+repo creates or touches CloudFront, the same way the Clumio configuration
+isn't in code either. The demo role needs no CloudFront permissions.
+
+**The origin group is created live, as the recovery step.** The distribution
+starts with a single S3 origin, so the deletion produces a genuine outage;
+adding the Clumio origin and creating the group is what brings the storefront
+back. That was chosen over pre-building the group because it makes the
+mechanism visible and gives Clumio something to visibly do — pre-built, the
+demo's visible outcome is nothing happening at all.
+
+It means the claim is *"recover availability in minutes by serving from your
+backup"*, not *"automatic failover with no human intervention"*. Both are true
+of the product; only one is true of what's on screen. Don't narrate the second
+while doing the first.
+
+Worth drawing out: because CloudFront retries the primary on every request,
+the transition back drains itself as the restore progresses. No cutover, no
+moment of deciding it's safe to switch. And since CloudFront is only in the
+read path, writes continue against the source bucket throughout, so a real
+deployment keeps trading during recovery. (This app has no S3 write path, so
+that last part is an architectural point, not something on screen.)
+
+See `docs/cloudfront-setup.md` for the console steps, the cache-TTL warning
+and the tier constraint.
 
 **The distinction that must never blur: 200 versus an error code.**
 
-- Deletion → S3 returns 403/404 → CloudFront's origin group fails over
-  automatically → the storefront keeps working with no human intervention.
-  This is an *availability* problem, and it's the one CloudFront failover can
-  actually solve. `scripts/s3-delete-incident.js` produces it. Without the
-  origin group in front, the same deletion takes the tenant fully down — no
-  menu, no orders — which is what makes the failover worth showing.
+- Deletion → S3 returns 403/404 → an error code exists, so CloudFront failover
+  can route around it. This is an *availability* problem, and the one an origin
+  group can actually solve. `scripts/s3-delete-incident.js` produces it. With
+  no group in front, the same deletion takes the tenant fully down: no menu, no
+  orders. That outage is the "before", and standing the origin group up against
+  the Clumio access point is the recovery.
 - Overwrite → S3 still returns 200, just with corrupted content → failover
   never fires, because there is no error code to trigger on. This is a *data*
   problem — the bytes are wrong, not missing — and needs the previous object

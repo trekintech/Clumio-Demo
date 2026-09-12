@@ -146,19 +146,18 @@ npm run s3-delete-incident
 Deletes everything under `menu/<slug>/` plus the settlement exports for the
 same three tenants. S3 returns 403 or 404 for those keys from then on.
 
-What you see depends on whether CloudFront is in front:
+Those three restaurants go down. The dashboard says "Storefront down — menu
+unavailable" and states they cannot take orders. Historical orders still show,
+so what's lost is future revenue.
 
-- Reading straight from S3, those three restaurants go down. The dashboard
-  says "Storefront down — menu unavailable" and states they cannot take
-  orders. Historical orders still show, so the loss is future revenue.
-- Reading through a CloudFront origin group with Clumio Instant Access as the
-  secondary origin, failover serves the menu document from the backup copy and
-  nothing visibly happens at all.
+The recovery is where CloudFront comes in. Put the distribution in front of the
+bucket with a single S3 origin, and this deletion is a real outage. Then, as
+the recovery step, request Instant Access in Clumio, add the read-only access
+point it gives you as a second origin, and create an origin group with the
+bucket as primary and the access point as secondary. The restaurants come back,
+served from the backup, before a single object has been restored.
 
-Film it both ways. Three restaurants going dark is the before; the same
-command doing nothing is the after.
-
-To point the app at CloudFront, set the distribution domain and restart:
+To point the app at the distribution, set the domain and restart:
 
 ```bash
 export IMAGE_BASE_URL=https://<distribution-id>.cloudfront.net
@@ -170,14 +169,20 @@ $env:IMAGE_BASE_URL = "https://<distribution-id>.cloudfront.net"
 npm start
 ```
 
-Building the origin group is a one-off job in the CloudFront console. The
-steps, including the failover criteria and the cache setting that will
-otherwise make this look like nothing happened, are in
-[docs/cloudfront-setup.md](docs/cloudfront-setup.md).
+Leave `IMAGE_BASE_URL` unset to reach S3 directly, which is how you rehearse
+the outage without involving CloudFront at all.
 
-Recovery is restoring the source objects. CloudFront tries the primary origin
-on every request, so the app goes back to it on its own with no switch to
-flip.
+Two things worth saying on stage. CloudFront retries the primary on every
+request, so once you do restore the source objects the traffic drains back on
+its own: no cutover, no moment of deciding it's safe to switch. And because
+CloudFront sits only in the read path, a real deployment keeps accepting writes
+against the source bucket throughout the recovery. (This app has no S3 write
+path, so that second one is an architectural point rather than something you
+can point at.)
+
+Console steps, the failover criteria that will otherwise silently break this,
+and the cache setting that will make the deletion look like it did nothing are
+in [docs/cloudfront-setup.md](docs/cloudfront-setup.md).
 
 ### Scenario 3: S3 overwrite, a data problem
 
