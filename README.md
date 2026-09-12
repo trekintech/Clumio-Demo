@@ -47,7 +47,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1
 ```
 
 Add `-Install` to let it install them. Open a new terminal afterwards or the
-new tools won't be on `PATH`.
+new tools won't be on `PATH`. Once Node is present, `npm run setup:windows`
+does the same thing without the long invocation.
 
 If you downloaded a ZIP rather than cloning, your folder will be called
 `Clumio-Demo-main` and it never updates. Scripts added after you downloaded
@@ -55,6 +56,19 @@ won't exist, which usually shows up as "the file does not exist" or
 `ERR_MODULE_NOT_FOUND`. Clone instead.
 
 ## Running the demo
+
+The scripts only ever touch DynamoDB and S3. Anything involving CloudFront or
+Clumio is yours to do in the console, and the demo role needs no permissions
+for either:
+
+| | Who does it |
+|---|---|
+| DynamoDB table, PITR, tenant data | `npm run seed` |
+| S3 bucket and versioning | `npm run setup`, `npm run seed` |
+| Menu documents and artwork | `npm run seed` |
+| Breaking things (all three scenarios) | the incident scripts |
+| Clumio backup, Backtrack, Instant Access | you, in Clumio |
+| CloudFront distribution and origin group | you, in the console |
 
 ### Rehearse on a small estate first
 
@@ -104,6 +118,31 @@ point, slow it down with `SEED_CONCURRENCY=8`.
 
 Do this before you break anything. Nothing below is recoverable otherwise.
 
+### Set up CloudFront, if you're filming the S3 deletion
+
+Only needed for Scenario 2. Skip it for the DynamoDB clip.
+
+Build a distribution in the console with **one origin**: the source S3 bucket,
+locked down with OAC. Point the cache behaviour straight at it. No origin group
+yet — that gets created during the demo, as the recovery.
+
+Then point the app at it and restart:
+
+```bash
+export IMAGE_BASE_URL=https://<distribution-id>.cloudfront.net
+npm start
+```
+
+```powershell
+$env:IMAGE_BASE_URL = "https://<distribution-id>.cloudfront.net"
+npm start
+```
+
+Set a short cache TTL on the menu path while you're in there. If CloudFront is
+still serving a cached copy when you run the deletion, nothing visible happens
+and the take is wasted. Full steps are in
+[docs/cloudfront-setup.md](docs/cloudfront-setup.md).
+
 ### Scenario 1: DynamoDB corruption
 
 The lead story, and the strongest clip.
@@ -150,39 +189,34 @@ Those three restaurants go down. The dashboard says "Storefront down — menu
 unavailable" and states they cannot take orders. Historical orders still show,
 so what's lost is future revenue.
 
-The recovery is where CloudFront comes in. Put the distribution in front of the
-bucket with a single S3 origin, and this deletion is a real outage. Then, as
-the recovery step, request Instant Access in Clumio, add the read-only access
-point it gives you as a second origin, and create an origin group with the
-bucket as primary and the access point as secondary. The restaurants come back,
-served from the backup, before a single object has been restored.
+Now the recovery, in the console:
 
-To point the app at the distribution, set the domain and restart:
+1. In Clumio, request Instant Access on the backup. It gives you a read-only
+   S3 access point.
+2. In CloudFront, add that access point as a second origin, with OAC.
+3. Create an origin group: bucket primary, access point secondary, failover on
+   **403 and 404, both**. Tick only one and some deletions won't fail over,
+   which looks like the demo is broken with no clue why.
+4. Repoint the cache behaviour at the origin group.
 
-```bash
-export IMAGE_BASE_URL=https://<distribution-id>.cloudfront.net
-npm start
-```
+Once it deploys the restaurants are trading again, served from the backup,
+before a single object has been restored.
 
-```powershell
-$env:IMAGE_BASE_URL = "https://<distribution-id>.cloudfront.net"
-npm start
-```
+Two things worth saying while that happens. CloudFront retries the primary on
+every request, so when you do restore the source objects the traffic drains
+back on its own: no cutover, no moment of deciding it's safe to switch. And
+because CloudFront sits only in the read path, a real deployment keeps
+accepting writes against the source bucket throughout the recovery. (This app
+has no S3 write path, so that second one is an architectural point rather than
+something you can point at.)
 
-Leave `IMAGE_BASE_URL` unset to reach S3 directly, which is how you rehearse
-the outage without involving CloudFront at all.
+Be accurate about the claim. This demonstrates recovering availability in
+minutes by serving from your backup. It is not automatic failover with no human
+intervention, because you built the group live. Both are true of the product;
+only one is true of what's on screen.
 
-Two things worth saying on stage. CloudFront retries the primary on every
-request, so once you do restore the source objects the traffic drains back on
-its own: no cutover, no moment of deciding it's safe to switch. And because
-CloudFront sits only in the read path, a real deployment keeps accepting writes
-against the source bucket throughout the recovery. (This app has no S3 write
-path, so that second one is an architectural point rather than something you
-can point at.)
-
-Console steps, the failover criteria that will otherwise silently break this,
-and the cache setting that will make the deletion look like it did nothing are
-in [docs/cloudfront-setup.md](docs/cloudfront-setup.md).
+If you want to rehearse the outage without CloudFront involved at all, leave
+`IMAGE_BASE_URL` unset and the app reads S3 directly.
 
 ### Scenario 3: S3 overwrite, a data problem
 
