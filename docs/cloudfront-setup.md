@@ -19,27 +19,22 @@ Instant Access access point, which doesn't exist until you've taken a backup
 and requested Instant Access on it. There's nothing to point at when setup
 runs.
 
-## Two ways to run this, and the claim each supports
+## The shape of the demo
 
-Decide which before you build anything, because they need different setups and
-they support different statements on stage.
+Instant Access gives you a read-only view of the backup at a point in time. It
+is a recovery and audit tool, not a permanent second origin: you stand it up
+to keep serving while the source is restored, and you take it down afterwards.
+That shapes the whole scenario.
 
-**A. Group pre-built.** Both origins configured before the incident. You
-delete the objects and nothing visibly happens. Supports: *"automatic
-failover, no human intervention."* The catch is that the visible outcome is
-nothing at all, and Clumio's part is invisible.
+So the distribution starts with **one origin**, the source bucket. The deletion
+is then a genuine outage, and standing up Instant Access as a second origin is
+the recovery. The storefront serves from the backup copy while the real restore
+runs behind it, then drains back to the source.
 
-**B. Group added as the recovery step.** Start with a single S3 origin. The
-deletion takes the restaurants down for real. You then add the Clumio origin
-and create the group, and they come back. Supports: *"recover availability in
-minutes by serving from your backup, before restoring a single object."*
-
-B shows the mechanism and makes Clumio visibly do something, which is usually
-the better fit for a partner audience. The rest of this document assumes B.
-
-Whichever you pick, narrate the claim you're actually demonstrating. If you
-build the group live, it isn't automatic failover, and someone will notice you
-clicked.
+That is also the honest claim to make on stage: *recover availability in
+minutes by serving from your backup, before restoring a single object.* Not
+"automatic failover with no human intervention", which would require the group
+to already exist and a permanent secondary origin you would not actually run.
 
 CloudFront changes take a few minutes to deploy. That's fine here because the
 footage is recorded and narrated live, so the wait gets cut.
@@ -106,6 +101,11 @@ There is no switch to flip, no moment where you decide it's safe to go back,
 and no window where the two origins disagree about which is authoritative.
 That is the part worth drawing out on stage: the transition manages itself.
 
+Once the restore is complete and nothing is reaching the secondary any more,
+repoint the behaviour at the bucket origin and release the Instant Access
+point. It's a point-in-time copy provisioned for the recovery window, not
+something you leave wired in.
+
 In a real deployment, writes continue straight to the source bucket throughout,
 because CloudFront is only in the read path. The business keeps trading while
 the restore runs. (This demo app has no S3 write path of its own, so that's an
@@ -145,8 +145,8 @@ So deleting the menu document is an outage and corrupting an image isn't.
 
 `npm run s3-corrupt-incident` overwrites images in place. S3 still returns 200,
 so failover never fires. There's no error code to trigger on, and the origin
-group is irrelevant. Recovery is rolling the object back to its previous
-version, which is why the seed enables bucket versioning.
+group is irrelevant. Recovery is Backtrack, rolling the object back to its
+previous version, which is why the seed enables bucket versioning.
 
 Keep that separate in the narration. Deletion is an availability problem that
 CloudFront routes around. Corruption is a data problem that nothing routes
@@ -162,9 +162,3 @@ on Archive and its thaw window, which is why it's told as an audit and
 compliance story rather than a fast-recovery one. Don't imply Instant Access
 could apply to the RDS scenario. (There's no RDS code in this repo.)
 
-## Still unverified
-
-Calling the S3 version rollback "Backtrack" hasn't been checked against
-documentation. The DynamoDB Backtrack claim in `CLAUDE.md` was verified against
-a specific Commvault blog post; that doesn't carry over to S3. Confirm the
-correct product name before you say it on stage.

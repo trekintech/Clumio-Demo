@@ -48,23 +48,16 @@ period of **up to 48 hours**. It is therefore an *audit and compliance* story,
 not a fast-recovery story. Do not write copy anywhere in this repo that implies
 RDS query is instant.
 
-S3 Instant Access mechanics were confirmed by the presenter in September 2026:
-it provides a **read-only S3 access point**, usable as a CloudFront origin with
-OAC, and it stays available long enough for a demo. That came from the
-presenter's own console, not from documentation, so treat it as reliable for
-this demo and still worth re-checking before making public claims.
+S3 Instant Access provides a **read-only S3 access point** at a point in time,
+usable as a CloudFront origin with OAC. It is a recovery and audit tool: stood
+up for a recovery window, released afterwards, never a permanent origin.
 
-Timings remain unverified. Do not add RTO numbers or duration claims to the
-README, the UI, or anywhere else without checking the docs first.
+Do not add RTO numbers or duration claims to the README, the UI, or anywhere
+else without checking the docs first.
 
-The DynamoDB and Backtrack claims were verified against the Commvault blog post
-on Clumio Backtrack for DynamoDB (August 2025).
-
-The S3 overwrite/corruption scenario is narrated as recovering via "Backtrack's
-version rollback." That has **not** been verified the way the DynamoDB claim
-above was — it has not been checked against documentation, only asserted.
-Confirm the correct product name for S3 object-version recovery before this
-goes on stage; do not assume the verified DynamoDB claim extends to S3.
+Backtrack is the rollback capability, for DynamoDB partitions and for S3
+object versions. The DynamoDB claims were verified against the Commvault blog
+post on Clumio Backtrack for DynamoDB (August 2025).
 
 ## Architecture
 
@@ -194,17 +187,17 @@ secondary, failover criteria set to **403 and 404, both**. Nothing in this
 repo creates or touches CloudFront, the same way the Clumio configuration
 isn't in code either. The demo role needs no CloudFront permissions.
 
-**The origin group is created live, as the recovery step.** The distribution
-starts with a single S3 origin, so the deletion produces a genuine outage;
-adding the Clumio origin and creating the group is what brings the storefront
-back. That was chosen over pre-building the group because it makes the
-mechanism visible and gives Clumio something to visibly do — pre-built, the
-demo's visible outcome is nothing happening at all.
+**The origin group is created live, as the recovery step.** Instant Access is
+a read-only view of the backup at a point in time: a recovery and audit tool,
+stood up for the recovery window and released afterwards. It is not a
+permanent secondary origin, so the distribution starts with the source bucket
+alone. The deletion is then a real outage, and standing up Instant Access as a
+second origin is what brings the storefront back.
 
-It means the claim is *"recover availability in minutes by serving from your
-backup"*, not *"automatic failover with no human intervention"*. Both are true
-of the product; only one is true of what's on screen. Don't narrate the second
-while doing the first.
+The claim this supports is *"recover availability in minutes by serving from
+your backup, before restoring a single object"*. Not *"automatic failover with
+no human intervention"*, which would need the group to already exist and a
+standing secondary origin nobody would actually run.
 
 Worth drawing out: because CloudFront retries the primary on every request,
 the transition back drains itself as the restore progresses. No cutover, no

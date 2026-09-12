@@ -192,7 +192,8 @@ so what's lost is future revenue.
 Now the recovery, in the console:
 
 1. In Clumio, request Instant Access on the backup. It gives you a read-only
-   S3 access point.
+   S3 access point: a point-in-time view, stood up for the recovery window and
+   released once the restore has finished.
 2. In CloudFront, add that access point as a second origin, with OAC.
 3. Create an origin group: bucket primary, access point secondary, failover on
    **403 and 404, both**. Tick only one and some deletions won't fail over,
@@ -238,8 +239,8 @@ healthy. Green banner, assets all present, while the customer is looking at
 garbage. Every error-code-based check passes. That is exactly why an
 availability mechanism cannot fix a data problem.
 
-Recovery is rolling the object back to its previous version, not Instant
-Access.
+Recovery is Backtrack, rolling the object back to its previous version. Not
+Instant Access, which only helps when something is missing rather than wrong.
 
 Keep scenarios 2 and 3 separate in the narration. Deletion is an availability
 problem that CloudFront routes around. Corruption is a data problem that
