@@ -127,6 +127,16 @@ app.get("/api/tenant/:slug", async (req, res) => {
         failing: flagged.filter((o) => o.corrupt).length
       },
       menu: withImages,
+      // Surfaced so the dashboard can show where the menu is served from.
+      // Without it the S3 scenarios are illegible: the audience sees tiles
+      // break with no indication they were ever objects in a bucket.
+      // Filler tenants never had a menu published, so quoting a path for them
+      // would imply an object that was never meant to exist.
+      menuSource: tenant?.synthetic
+        ? null
+        : IMAGE_BASE_URL
+          ? `${IMAGE_BASE_URL.replace(/\/$/, "")}/menu/${slug}/menu.json`
+          : `s3://${BUCKET}/menu/${slug}/menu.json`,
       // False means the storefront cannot serve a menu at all — customers
       // cannot order. This is the S3 availability scenario.
       menuAvailable: menuDoc.available,

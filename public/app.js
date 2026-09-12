@@ -185,13 +185,22 @@ function renderGallery(menu, available) {
 
     const cap = document.createElement("div");
     cap.className = "cap";
+    const row = document.createElement("div");
+    row.className = "row";
     const n = document.createElement("span");
     n.className = "n";
     n.textContent = m.name;
     const p = document.createElement("span");
     p.className = "p";
     p.textContent = gbp.format(m.price);
-    cap.append(n, p);
+    row.append(n, p);
+
+    // The object key, so a deleted or overwritten tile is obviously a file.
+    const k = document.createElement("span");
+    k.className = "k";
+    k.textContent = m.imageKey ? m.imageKey.split("/").pop() : "";
+
+    cap.append(row, k);
     tile.appendChild(cap);
     g.appendChild(tile);
   }
@@ -312,6 +321,18 @@ async function refresh() {
     const gross = d.orders.reduce((a, o) => a + (o.corrupt ? 0 : o.total || 0), 0);
     el("s-value").textContent = gbp.format(gross);
     el("f-value").textContent = d.counts.failing ? "excludes failed orders" : "recent orders";
+
+    const src = el("menusrc");
+    if (!d.menuSource) {
+      src.textContent = "no menu published";
+      src.className = "src";
+    } else if (d.menuAvailable === false) {
+      src.textContent = `${d.menuSource} — unreachable`;
+      src.className = "src gone";
+    } else {
+      src.textContent = d.menuSource;
+      src.className = "src";
+    }
 
     renderGallery(d.menu, d.menuAvailable);
     renderOrders(d.orders);
