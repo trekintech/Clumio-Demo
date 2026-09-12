@@ -1,322 +1,64 @@
-# Kerbside ops — Clumio demo environment
+# Kerbside ops
 
-A plain-looking multi-tenant ordering platform, used to show DynamoDB and S3
-recovery on stage. It runs locally against real AWS services, so the app's
-reaction and the Clumio console footage are both genuine.
+A multi-tenant food ordering platform, used as the backdrop for a live demo of
+Clumio recovery on DynamoDB and S3. It runs on your laptop but reads real AWS
+services, so what happens on screen is genuine rather than staged.
 
-**Nothing here is branded.** This is meant to look like the customer's own
-application, not a product demo.
+The app carries no Commvault or Clumio branding. It is meant to look like the
+customer's application, because the moment it looks like a vendor demo the
+audience stops believing it.
 
-## Get the code
-
-Clone it, so you can pull updates:
+## Quick start
 
 ```
 git clone https://github.com/trekintech/Clumio-Demo.git
 cd Clumio-Demo
-git pull            # later, to pick up changes
+npm run setup
+npm run seed
+npm start
 ```
 
-If you downloaded a ZIP instead, your folder will be called
-`Clumio-Demo-main` and it is a **snapshot**. It does not update, and
-`git pull` won't work in it. Scripts added after you downloaded simply won't
-be there, which shows up as:
+Then open http://localhost:5173.
 
-```
-The argument 'scripts\setup-windows.ps1' to the -File parameter does not exist.
-```
+`npm run setup` installs dependencies, checks your AWS credentials, picks and
+creates an S3 bucket, and verifies the role can do what the demo needs. It
+makes its own decisions and tells you what it chose, so it won't sit waiting
+on a prompt.
 
-If you see that, you have an old snapshot. Download a fresh ZIP, or clone
-properly. To check what your copy actually contains:
+Run every command from the repo root, the folder with `package.json` in it.
 
-```powershell
-Get-ChildItem scripts        # Windows
-```
+## What you need
 
-```bash
-ls scripts                   # macOS / Linux
-```
+- Node 20 or later
+- An AWS sandbox account you don't mind corrupting data in
+- AWS credentials that resolve: any profile, SSO session, assume-role setup,
+  environment variables or instance role
+- A Clumio tenant connected to that account
 
-You should see `setup.js`, `setup-windows.ps1`, `check-access.js`,
-`require-install.js`, `seed.js`, `bad-deploy.js`, `s3-delete-incident.js`,
-`s3-corrupt-incident.js`, `verify.js` and `env-syntax.js`. Anything missing
-means the snapshot predates it.
+The AWS CLI is optional. Everything here reaches AWS through the SDK, which
+reads your profiles and SSO sessions itself. You only need the CLI if you want
+setup to create a new SSO login or key pair for you.
 
-Run every command from the repo root, the folder containing `package.json`.
-
-## Prerequisites
-
-Genuinely just:
-
-- **Node 20 or later**
-- **An AWS sandbox account** you don't mind corrupting data in, with
-  credentials configured somehow (any profile, SSO session, assume-role
-  setup, environment variables or instance role will do)
-- **A Clumio tenant** connected to that account
-
-The AWS CLI is **optional**. Everything here talks to AWS through the SDK,
-which reads your profiles and SSO sessions directly. You only need the CLI if
-you want `npm run setup` to create a brand new SSO login or key pair for you.
-
-Then run `npm run setup`, which handles the rest and asks when it needs a
-decision. The sections below are reference material for doing any of it by
-hand.
-
-### Install the tooling
-
-**Windows.** There's a script for this. From the repo root:
+On Windows there's a script that checks for Node, git and the AWS CLI, and
+prints the winget command for anything missing:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup-windows.ps1
 ```
 
-If that reports the file "does not exist", you're either not in the repo root
-or you have an old ZIP snapshot. See "Get the code" above.
+Add `-Install` to let it install them. Open a new terminal afterwards or the
+new tools won't be on `PATH`.
 
-It checks PowerShell, winget, Node, the AWS CLI and git, and prints the exact
-`winget` command for anything missing. Add `-Install` to let it install them
-for you:
+If you downloaded a ZIP rather than cloning, your folder will be called
+`Clumio-Demo-main` and it never updates. Scripts added after you downloaded
+won't exist, which usually shows up as "the file does not exist" or
+`ERR_MODULE_NOT_FOUND`. Clone instead.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\setup-windows.ps1 -Install
-```
+## Running the demo
 
-Open a **new** terminal afterwards, or freshly installed tools won't be on
-`PATH` yet. Once Node exists you can use `npm run setup:windows` instead of
-the long form.
+### Rehearse on a small estate first
 
-Installing by hand, if you prefer:
-
-```powershell
-winget install --exact --id OpenJS.NodeJS.LTS
-winget install --exact --id Amazon.AWSCLI
-winget install --exact --id Git.Git
-```
-
-No winget (Windows 10 before 1809)? Use the installers directly:
-<https://nodejs.org/en/download> and
-<https://awscli.amazonaws.com/AWSCLIV2.msi>.
-
-**macOS.**
-
-```bash
-brew install node awscli
-```
-
-**Linux (Debian/Ubuntu).** The distro Node is usually too old, so use
-NodeSource:
-
-```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs
-
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip && sudo ./aws/install
-```
-
-Check both, on any platform:
-
-```
-node -v          # want v20 or higher
-aws --version    # want aws-cli/2.x
-```
-
-### Give the AWS CLI credentials
-
-**`npm run setup`, further down, can do everything in this section for you**
-interactively — it detects what's missing and offers to run it. Read on if
-you'd rather do it by hand first, or you're troubleshooting something it
-couldn't resolve on its own.
-
-**If you already have a working profile or role, use it.** Nothing here needs
-a dedicated one. Check what you've already got:
-
-```
-aws configure list-profiles
-aws sts get-caller-identity
-```
-
-If that second command prints an account and an ARN, you're already
-authenticated and can skip to the permission check below. To use a specific
-existing profile:
-
-```bash
-export AWS_PROFILE=<existing-profile>     # macOS / Linux
-```
-
-```powershell
-$env:AWS_PROFILE = "<existing-profile>"   # Windows PowerShell
-```
-
-The sections below are only for setting up access you don't already have.
-Pick whichever matches how your account works.
-
-**IAM Identity Center / SSO** (most common for role-based access):
-
-```
-aws configure sso
-aws sso login --profile kerbside-demo
-```
-
-**Assume an existing role.** Add a profile to your AWS config file
-(`~/.aws/config`, or `%USERPROFILE%\.aws\config` on Windows):
-
-```ini
-[profile kerbside-demo]
-role_arn       = arn:aws:iam::123456789012:role/YourExistingRole
-source_profile = default
-region         = eu-west-2
-```
-
-**Static keys** (simplest, least good):
-
-```
-aws configure --profile kerbside-demo
-```
-
-Then select the profile for your session and confirm it resolves:
-
-```bash
-export AWS_PROFILE=kerbside-demo         # macOS / Linux
-aws sts get-caller-identity
-```
-
-```powershell
-$env:AWS_PROFILE = "kerbside-demo"       # Windows PowerShell
-aws sts get-caller-identity
-```
-
-That last command must print an account and an ARN. If it does, the demo
-will authenticate, because nothing in this repo handles credentials itself.
-The SDK clients are built with a region and nothing else, so an existing
-role is fine, whether that's an assume-role profile, SSO, environment
-variables, or an instance role. `npm run setup` echoes the resolved ARN so
-you can confirm you're on the role you intended.
-
-If your credentials are temporary, prefer a profile the SDK can refresh on
-its own (`role_arn` with `source_profile`, or an SSO profile) over pasting
-short-lived `AWS_SESSION_TOKEN` values into your shell. Pasted session
-credentials don't refresh, and they expire mid-demo without warning.
-
-### Check the role can actually do the work
-
-`npm run setup` does this as step 4. To re-run it on its own later:
-
-```
-npm run check-access
-```
-
-Credentials resolving is not the same as having permission: a role can
-authenticate perfectly and still be unable to create a table or write an
-object. This probes each permission the demo needs and maps any denial to the
-exact IAM action, printing a policy you can paste straight in. Where the
-table or bucket already exists it does a real write-and-delete round trip, so
-the answer isn't inferred from policy. To skip the write probes, run it
-directly as `node scripts/check-access.js --read-only` (flags don't survive
-`npm run` reliably on Windows).
-
-It goes through the AWS SDK rather than the CLI on purpose: that's the same
-credential path `server.js` and the seed take, and the two can resolve
-differently.
-
-Permissions needed:
-
-| Service | Actions |
-|---|---|
-| DynamoDB | `CreateTable`, `DescribeTable`, `UpdateContinuousBackups`, `BatchWriteItem`, `Query` |
-| S3 | `CreateBucket`, `HeadBucket`, `PutBucketVersioning`, `PutObject`, `GetObject`, `ListBucket`, `DeleteObject` |
-| STS | `GetCallerIdentity` |
-
-Before the table and bucket exist, the create and write actions can't be
-probed. `check-access` says so rather than implying a clean bill of health.
-Those are exercised in the first seconds of `npm run seed`, which fails fast
-and harmlessly if any are denied.
-
-### A note on shell syntax
-
-Commands below are shown for bash. On Windows PowerShell, environment
-variables are set differently, and the inline `FOO=bar command` form doesn't
-exist at all:
-
-| | bash / zsh | PowerShell |
-|---|---|---|
-| Set for the session | `export FOO=bar` | `$env:FOO = "bar"` |
-| Set for one command | `FOO=bar npm run seed` | `$env:FOO = "bar"; npm run seed` |
-
-Everything else (`npm run ...`) is identical on both.
-
-One more Windows quirk worth knowing: `npm run something -- --flag` often
-drops the `--flag` part on PowerShell and forwards only what follows it. So
-where a command takes options, run the script directly instead:
-
-```
-node scripts/check-access.js --read-only
-node scripts/setup.js --interactive
-```
-
-`npm run teardown -- <bucket-name>` is unaffected, because it looks for the
-bucket name itself rather than a flag.
-
-## Run it end to end
-
-### 1. Setup
-
-```
-npm run setup
-```
-
-That's the whole thing. It never stops to ask you for something it can work
-out on its own, and it says what it's doing at each step:
-
-1. **Dependencies** — installed quietly.
-2. **Credentials** — checks yours resolve. If they don't, it stops and tells
-   you how; it doesn't guess.
-3. **Bucket** — if you're still on the shared default (which is guaranteed to
-   collide, since S3 names are global) it picks a unique name for you, then
-   **creates the bucket**. It tells you the name it chose.
-4. **Permissions** — probes what the role can genuinely do, writing and
-   deleting a test object rather than inferring from policy. Anything denied
-   gets a ready-to-paste IAM policy naming the exact actions.
-5. **Seed** — offers to load the data immediately.
-
-**Your choices are remembered.** Setup writes the bucket name, region and
-profile to `.kerbside-local.json` (git-ignored, no secrets), and every script
-reads it. So you don't have to export anything in new terminals — open a
-fresh one, run `npm start`, and it already knows. Environment variables still
-win if you set them, so nothing is taken out of your hands:
-
-```bash
-export KERBSIDE_BUCKET=my-own-bucket-name
-npm run setup
-```
-
-```powershell
-$env:KERBSIDE_BUCKET = "my-own-bucket-name"
-npm run setup
-```
-
-**It never asks you anything by default**, so it can't sit waiting on a
-prompt you can't see. It decides, tells you what it decided, and moves on. If
-you'd rather be asked before it picks a bucket name or seeds:
-
-```
-node scripts/setup.js --interactive
-```
-
-That needs a real terminal. Through `npm run` it stays automatic either way.
-
-To re-check permissions later without the full flow:
-
-```
-npm run check-access
-```
-
-Both are safe to re-run. Neither writes anything to AWS beyond a probe object
-it deletes immediately.
-
-### 2. Rehearse with a small estate
-
-Don't make your first run the 314,000-item one.
+Don't let the first run be the 314,000-item one.
 
 ```bash
 SYNTHETIC_TENANT_COUNT=50 npm run seed
@@ -329,101 +71,92 @@ npm run seed
 npm start
 ```
 
-On PowerShell the variable stays set for the rest of the session, so clear it
-with `Remove-Item Env:SYNTHETIC_TENANT_COUNT` before seeding the full estate.
+Use the same count for both commands or the sidebar and the table disagree. On
+PowerShell the variable sticks for the rest of the session, so clear it with
+`Remove-Item Env:SYNTHETIC_TENANT_COUNT` before seeding properly.
 
-Open http://localhost:5173 and click about. Set the same tenant count for
-both commands, or the sidebar and the table won't agree.
-
-### 3. Seed the real estate
-
-```bash
-npm run seed
-npm start
-```
-
-This creates the table and bucket if they're missing, then loads two tiers of
-tenant:
-
-- 8 named tenants with 150 orders each, a published menu document, artwork
-  and a settlement CSV. These are the only ones that appear on camera.
-- 4,119 filler tenants with a name and orders only. They exist so the sidebar
-  reads as a real estate rather than eight rows. See `CLAUDE.md` → Scale.
-
-It also switches on DynamoDB point-in-time recovery, so you have the native
-comparison ready if someone challenges you from the floor, and S3 bucket
-versioning, which the corruption scenario needs.
-
-Budget a few minutes. Progress is logged as it goes: a line per named tenant,
-then a percentage roughly every 10% of the synthetic batches.
-
-DynamoDB throws transient 500s and throttling under sustained write load, so
-batches retry with exponential backoff. If a seed does still fail part way,
-**re-running is safe** — every write overwrites by key, so nothing duplicates:
+### Seed the full estate
 
 ```
 npm run seed
 ```
 
-If it repeatedly fails at the same point, ease off the write rate:
+Creates the table and bucket if they're missing, then loads:
 
-```bash
-SEED_CONCURRENCY=8 npm run seed
+- 8 named tenants with 150 orders each, a published menu document, artwork and
+  a settlement CSV. These are the only ones that appear on camera.
+- 4,119 filler tenants with a name and orders only, so the sidebar reads as a
+  real estate rather than eight rows.
+
+It also enables point-in-time recovery on the table, which gives you the
+native comparison if someone challenges you from the floor, and bucket
+versioning, which the overwrite scenario needs.
+
+Budget a few minutes. It logs a line per named tenant, then a percentage
+roughly every 10% of the filler batches.
+
+DynamoDB returns transient 500s under sustained write load, so batches retry
+with backoff. If a seed still dies part way, just run it again. Every write
+overwrites by key, so nothing duplicates. If it keeps failing at the same
+point, slow it down with `SEED_CONCURRENCY=8`.
+
+### Take a Clumio backup
+
+Do this before you break anything. Nothing below is recoverable otherwise.
+
+### Scenario 1: DynamoDB corruption
+
+The lead story, and the strongest clip.
+
 ```
-
-```powershell
-$env:SEED_CONCURRENCY = "8"; npm run seed
-```
-
-### 4. Take a Clumio backup
-
-Do this before breaking anything. Nothing below is recoverable otherwise.
-
-### 5. Run the DynamoDB scenario
-
-```bash
 npm run bad-deploy
 ```
 
 Corrupts about 95% of orders across three tenant partitions and nothing else:
 `TENANT#alma-kitchen`, `TENANT#brick-lane-grill`, `TENANT#corner-pantry`.
-Totals go to zero or to something absurd, and modifiers are stripped.
+Totals go to zero or to something absurd, and modifiers are stripped. Within
+four seconds the dashboard turns red on those three tenants without you
+touching the browser. The other five stay green.
 
-It writes `incident.json` with the timestamp to restore before and the
-partition keys to target. Read your Backtrack values from that file rather
-than from memory. Getting them exactly right is what makes this convincing.
+It writes `incident.json` with the timestamp to restore before and the exact
+partition keys. Read your Backtrack values out of that file rather than from
+memory.
 
 Recover with Backtrack, then:
 
-```bash
+```
 npm run verify
 ```
 
-You get a row per named tenant: order count, corrupt count, image count,
-whether the tenant can still trade, and its overall state. After a clean
-recovery everything reads healthy. If anything outside the three targets is
-damaged, it says so, which is the check you want behind you before you walk
-on stage.
+That prints a row per named tenant: orders, corrupt count, images, whether the
+tenant can still trade, and overall state. After a clean recovery everything
+reads healthy. If anything outside the three targets is damaged it says so,
+which is the check you want behind you before you stand up.
 
-### 6. Run the S3 scenario
+### Scenario 2: S3 deletion, an availability problem
 
-Full procedure, CloudFront console steps and the cache-TTL warning are in
-`docs/s3-demo-runbook.md`. Read that before filming.
+The storefront renders its menu from a document published to S3 at
+`menu/<slug>/menu.json`. The menu is not in DynamoDB. Lose that object and the
+restaurant cannot show a menu, so it cannot take orders.
 
-The short version: the storefront renders its menu from a document published
-to S3 at `menu/<slug>/menu.json`. The menu is not in DynamoDB. Lose that
-object and the restaurant can't show a menu, so it can't take orders.
-
-```bash
-npm run s3-delete-incident    # deletes objects. Restaurants go dark.
-npm run s3-corrupt-incident   # overwrites images. Restaurants stay up, looking wrong.
+```
+npm run s3-delete-incident
 ```
 
-`s3-delete-incident` removes everything under `menu/<slug>/` plus the
-settlement exports for the same three tenants. Read straight from S3, those
-three go down and the dashboard says so. Put the CloudFront origin group in
-front, with Clumio Instant Access as the secondary origin, and the same
-deletion does nothing visible at all. Worth filming both ways round.
+Deletes everything under `menu/<slug>/` plus the settlement exports for the
+same three tenants. S3 returns 403 or 404 for those keys from then on.
+
+What you see depends on whether CloudFront is in front:
+
+- Reading straight from S3, those three restaurants go down. The dashboard
+  says "Storefront down — menu unavailable" and states they cannot take
+  orders. Historical orders still show, so the loss is future revenue.
+- Reading through a CloudFront origin group with Clumio Instant Access as the
+  secondary origin, failover serves the menu document from the backup copy and
+  nothing visibly happens at all.
+
+Film it both ways. Three restaurants going dark is the before; the same
+command doing nothing is the after.
 
 To point the app at CloudFront, set the distribution domain and restart:
 
@@ -437,12 +170,63 @@ $env:IMAGE_BASE_URL = "https://<distribution-id>.cloudfront.net"
 npm start
 ```
 
-`s3-corrupt-incident` overwrites the menu images in place and leaves
-`menu.json` alone, so the restaurants keep trading while the artwork turns to
-garbage. S3 still returns 200, so CloudFront failover never fires and the
-dashboard still reports everything healthy. That gap between "all checks
-green" and "the customer is looking at nonsense" is the point of the
-scenario. Recovery here is the previous object version, not Instant Access.
+Building the origin group is a one-off job in the CloudFront console. The
+steps, including the failover criteria and the cache setting that will
+otherwise make this look like nothing happened, are in
+[docs/cloudfront-setup.md](docs/cloudfront-setup.md).
+
+Recovery is restoring the source objects. CloudFront tries the primary origin
+on every request, so the app goes back to it on its own with no switch to
+flip.
+
+### Scenario 3: S3 overwrite, a data problem
+
+```
+npm run s3-corrupt-incident
+```
+
+Overwrites the menu images in place for the same three tenants. Same keys, new
+and visibly wrong content. It leaves `menu.json` alone, so the restaurants
+stay up and keep trading.
+
+S3 returns 200 for every one of those keys, so CloudFront failover never
+fires. There is no error code to fire on. The gallery renders whatever comes
+back, on both the direct and CloudFront paths, which is the visual proof that
+failover doesn't help here.
+
+Worth saying out loud on stage: the dashboard still reports these tenants
+healthy. Green banner, assets all present, while the customer is looking at
+garbage. Every error-code-based check passes. That is exactly why an
+availability mechanism cannot fix a data problem.
+
+Recovery is rolling the object back to its previous version, not Instant
+Access.
+
+Keep scenarios 2 and 3 separate in the narration. Deletion is an availability
+problem that CloudFront routes around. Corruption is a data problem that
+nothing routes around, because the bytes themselves are wrong. Blur the two
+and the argument collapses.
+
+## Recording
+
+The dashboard polls every four seconds, so recovery appears on screen without
+you touching the browser. Talk over the app and let the data come back on its
+own.
+
+A capture order that works:
+
+1. Healthy dashboard, sidebar open so the size of the estate is obvious
+2. Run the incident script off camera
+3. Broken dashboard. Hold on it. Let it sit longer than feels comfortable.
+4. Clumio console: set the timestamp, target the partition keys
+5. Back to the dashboard, let the poll bring it round
+6. Terminal, running `npm run verify`
+
+Record with system audio muted and narrate live. Piping laptop audio into a
+venue PA is a risk you don't need.
+
+You'll want two terminals: one running `npm start`, which holds that window
+until you stop it, and another for the incident and verify commands.
 
 ## Configuration
 
@@ -458,144 +242,200 @@ scenario. Recovery here is the previous object version, not Instant Access.
 | `PORT` | `5173` | Local web server port |
 | `IMAGE_BASE_URL` | unset | CloudFront domain for the menu document and artwork. Unset reads from S3 directly. |
 
+Setup writes the bucket name, region and profile to `.kerbside-local.json`,
+which is git-ignored and holds no secrets. Every script reads it, so a new
+terminal already knows your settings without you exporting anything.
+Environment variables still take precedence.
+
 Tenants, menus and the blast radius live in `config.js`.
 
-## Recording
+## AWS credentials
 
-The dashboard polls every four seconds, so recovery turns up on screen
-without you touching the browser. Talk over the app and let the data come
-back on its own.
+`npm run setup` handles this. What follows is for doing it by hand, or working
+out why setup couldn't.
 
-A reasonable capture order:
-
-1. Healthy dashboard, sidebar open so the size of the estate is obvious
-2. Run the incident script off camera
-3. Broken dashboard. Hold on it. Let it sit longer than feels comfortable.
-4. Clumio console: target the partition keys, set the timestamp
-5. Back to the dashboard, let the poll bring it round
-6. Terminal, running `npm run verify`
-
-Record with system audio muted and narrate live. Piping laptop audio into a
-venue PA is a risk you don't need.
-
-## When something goes wrong
-
-The dashboard never shows a raw stack trace. AWS failures are caught and
-rendered as a named panel with the fix, so if something breaks while you're
-on a projector it still looks like a working application.
-
-The terminal commands hold to the same standard. Every script that talks to
-AWS (`start`, `seed`, `bad-deploy`, both S3 incidents, `verify`,
-`check-access`) checks dependencies are installed before it does anything
-else, and fails with a one-line fix rather than Node's raw
-`ERR_MODULE_NOT_FOUND`. If you see that error anyway, you're running an old
-copy from before this check existed — see "Get the code" above.
-
-It recognises missing or expired credentials, table not found, bucket not
-found, access denied, DynamoDB throttling, and the local server dying. Each
-one names the variable or command that sorts it. Anything unrecognised falls
-back to a generic panel and points you at the terminal.
-
-The heartbeat top right shows how fresh the data is: green when live, amber
-past ten seconds, red past twenty. If AWS stops answering mid-recording,
-you'll spot it before the audience does.
-
-### "Port 5173 is already in use"
-
-An earlier `npm start` is still running. That matters beyond the error: the
-old process keeps serving the files it started with, so after pulling a
-change you can be looking at the previous version and think the fix didn't
-work.
+If you already have a working profile, use it. Nothing here needs a dedicated
+one.
 
 ```bash
-lsof -ti tcp:5173 | xargs kill      # macOS / Linux
+export AWS_PROFILE=your-profile
+npm run check-access
+```
+
+```powershell
+$env:AWS_PROFILE = "your-profile"
+npm run check-access
+```
+
+If you need to set access up from scratch, pick whichever matches your
+account. IAM Identity Center:
+
+```
+aws configure sso
+aws sso login --profile kerbside-demo
+```
+
+Assuming an existing role, via `~/.aws/config` (or
+`%USERPROFILE%\.aws\config`):
+
+```ini
+[profile kerbside-demo]
+role_arn       = arn:aws:iam::123456789012:role/YourExistingRole
+source_profile = default
+region         = eu-west-2
+```
+
+Or access keys, which work but are the least good option:
+
+```
+aws configure --profile kerbside-demo
+```
+
+If your credentials are temporary, use a profile the SDK can refresh itself
+(`role_arn` with `source_profile`, or SSO) rather than pasting
+`AWS_SESSION_TOKEN` values into your shell. Pasted session credentials don't
+refresh and expire mid-demo without warning.
+
+### Checking permissions
+
+Credentials resolving is not the same as having permission. A role can
+authenticate perfectly and still be unable to create a table.
+
+```
+npm run check-access
+```
+
+This probes each permission and maps any denial to the exact IAM action,
+printing a policy you can paste in. Where the table or bucket already exists
+it does a real write-and-delete round trip rather than inferring from policy.
+
+| Service | Actions |
+|---|---|
+| DynamoDB | `CreateTable`, `DescribeTable`, `UpdateContinuousBackups`, `BatchWriteItem`, `Query` |
+| S3 | `CreateBucket`, `HeadBucket`, `PutBucketVersioning`, `PutObject`, `GetObject`, `ListBucket`, `DeleteObject` |
+| STS | `GetCallerIdentity` (only if you use the AWS CLI) |
+
+Before the table and bucket exist, the create and write actions can't be
+probed. `check-access` says so rather than implying a clean bill of health.
+
+## Windows and shell notes
+
+Environment variables are set differently, and the inline `FOO=bar command`
+form doesn't exist in PowerShell:
+
+| | bash / zsh | PowerShell |
+|---|---|---|
+| For the session | `export FOO=bar` | `$env:FOO = "bar"` |
+| For one command | `FOO=bar npm run seed` | `$env:FOO = "bar"; npm run seed` |
+
+`npm run something -- --flag` often drops the flag on PowerShell and forwards
+only what follows it. Where a command takes options, call the script directly:
+
+```
+node scripts/check-access.js --read-only
+node scripts/setup.js --interactive
+```
+
+`npm run teardown -- <bucket-name>` is unaffected, because it looks for the
+bucket name rather than a flag.
+
+## Troubleshooting
+
+The dashboard never shows a stack trace. AWS failures are caught and rendered
+as a named panel naming the fix, so if something breaks while you're on a
+projector it still looks like a working application. It recognises missing or
+expired credentials, table or bucket not found, access denied, throttling, and
+the server dying.
+
+The heartbeat in the top right shows how fresh the data is: green when live,
+amber past ten seconds, red past twenty. If AWS stops answering mid-recording
+you'll see it before the audience does.
+
+**`Cannot GET /`** — you're on an old copy from before that was fixed, or an
+older server process is still running and serving stale files. Stop it and
+start again.
+
+**`Port 5173 is already in use`** — an earlier `npm start` is still running.
+It keeps serving the files it started with, so after pulling a change you can
+be looking at the old version and think the fix didn't work.
+
+```bash
+lsof -ti tcp:5173 | xargs kill
 ```
 
 ```powershell
 Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force
 ```
 
-The PowerShell line stops every Node process, which is the quick option. To
-target just this one, use `Get-NetTCPConnection -LocalPort 5173` to find the
-owning process first. Or leave it and use another port:
+That PowerShell line stops every Node process, which is the quick option. Or
+leave it and use `PORT=5174 npm start`.
 
-```bash
-PORT=5174 npm start
+**`ERR_MODULE_NOT_FOUND`** — dependencies aren't installed. Run `npm run
+setup`. If you see it from `npm run setup` itself, you're on an old copy;
+`npm install` then try again.
+
+**Orders never change on their own.** That's correct. Nothing generates
+orders after seeding and the server only reads. The four-second poll exists so
+that when you break or recover something, the dashboard reflects it unattended.
+
+## Resetting and tearing down
+
+Re-seeding is the quickest way back to a clean state between rehearsals. You
+don't need to tear anything down to run the demo again.
+
+```
+npm run seed
 ```
 
-```powershell
-$env:PORT = "5174"; npm start
+To remove the AWS resources:
+
 ```
-
-## Reset
-
-```bash
-npm run seed      # re-seeds over the top and restores a clean state
-```
-
-Re-seeding overwrites by key, so it's the quickest way back to a clean state
-between rehearsals. You don't need to tear anything down to run the demo
-again.
-
-## Tearing down
-
-```bash
 npm run teardown
 ```
 
-Shows what exists and deletes nothing. To actually delete, pass the bucket
-name back:
+That shows what exists and deletes nothing. To actually delete, pass the
+bucket name back:
 
-```bash
-npm run teardown -- <your-bucket-name>
+```
+npm run teardown -- your-bucket-name
 ```
 
-Typing the exact bucket name is the safety catch. Anything else — a
-truncated name, a different name, no name — stays a dry run, and there's no
-prompt involved because prompts are unreliable under `npm run` on Windows.
-`--keep-table` and `--keep-bucket` spare either one.
+Typing the exact name is the safety catch. Anything else stays a dry run.
+`--keep-table` and `--keep-bucket` spare either one. It empties the bucket
+properly, including every object version and delete marker, and disables PITR
+before deleting the table so backup charges stop straight away.
 
-It empties the bucket properly (every object version and delete marker,
-since the seed enables versioning), disables PITR before removing the table
-so continuous-backup charges stop immediately, then deletes both.
-
-**It deliberately does not touch:**
-
-- **Your CloudFront distribution**, if you built one. Disable it, wait for it
-  to finish deploying, then delete it in the CloudFront console. This is the
-  one component worth remembering, as it bills while deployed regardless of
-  traffic.
-- **Your Clumio backups and protection policies.** Remove those in the Clumio
-  console.
+It does not touch your CloudFront distribution or your Clumio backups, since
+it didn't create either. Remove those in their own consoles.
 
 ### What actually costs anything
 
-Honestly, not much between demos. The table holds a few hundred thousand
-small items, so it's tens of megabytes: storage and PITR are priced per GB,
-which at this size is negligible. The S3 content is smaller still.
+Not much between demos. The table holds a few hundred thousand small items, so
+it's tens of megabytes, and storage and PITR are priced per GB. The S3 content
+is smaller still.
 
-The costs worth thinking about, in order:
+Worth thinking about, in order:
 
-1. **CloudFront**, if you leave a distribution deployed.
-2. **Write volume when seeding.** Each full seed writes ~314,000 items, so
-   repeatedly re-seeding the full estate costs more than leaving it sitting
-   there. Rehearse with `SYNTHETIC_TENANT_COUNT=50`.
-3. **PITR**, which bills against table size for as long as it's enabled. The
-   teardown turns it off; if you keep the table, turn it off yourself after
-   the event.
+1. CloudFront, if you leave a distribution deployed. It bills while deployed
+   regardless of traffic, and it's the one people forget.
+2. Write volume when seeding. Each full seed writes around 314,000 items, so
+   repeatedly re-seeding costs more than leaving the data in place.
+3. PITR, which bills against table size for as long as it's on. Teardown turns
+   it off; if you keep the table, turn it off yourself after the event.
 
-So if you're coming back to this in a few days, leaving the table and bucket
-in place is usually cheaper than tearing down and re-seeding.
+If you're coming back to this in a few days, leaving the table and bucket
+alone is usually cheaper than tearing down and re-seeding.
 
-## Known caveats
+## Caveats
 
 - `verify.js` decides an order is corrupt using the same rule as the
   dashboard. Change pricing logic in `config.js` and you must change
   `validation.js` too, or the terminal and the screen will contradict each
   other.
-- PITR adds cost for as long as it's on. Turn it off after the event.
 - Bucket versioning keeps old copies of overwritten objects until you clear
   them out.
 - Menu artwork is generated SVG, hand-drawn per dish, not photography. See
   `DISH_ICONS` in `scripts/seed.js`. It holds up at 1080p, but swap in real
   photography if you want the gallery to look richer.
+- There is no RDS scenario in this repo. The third capability in the wider
+  story (SQL against an archived backup) has no code here.

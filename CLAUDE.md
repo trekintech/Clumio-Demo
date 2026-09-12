@@ -90,7 +90,9 @@ goes on stage; do not assume the verified DynamoDB claim extends to S3.
 - `scripts/teardown.js` — deletes the table and bucket. Dry-run unless the
   bucket name is passed back as an argument. See Cost and cleanup.
 
-See `docs/s3-demo-runbook.md` for the full S3 demo procedure.
+The demo procedure lives in `README.md`. `docs/cloudfront-setup.md` covers
+only the one-off CloudFront origin-group build, so the README can be read
+straight through without leaving it mid-run.
 
 The blast radius is three tenants, defined in `config.js`. The point of the
 whole demo is that recovery is *scoped*, so never widen it to all tenants —
@@ -187,7 +189,7 @@ a manual origin flip: source bucket as primary, a Clumio Instant Access
 endpoint as secondary, failover criteria set to **403 and 404, both**. The
 distribution and origin group are built by hand in the CloudFront console —
 deliberately not created in code, the same way the RDS and DynamoDB Clumio
-configuration isn't — see `docs/s3-demo-runbook.md` for the exact console
+configuration isn't — see `docs/cloudfront-setup.md` for the exact console
 steps, the cache-TTL warning, and the tier constraint.
 
 **The distinction that must never blur: 200 versus an error code.**

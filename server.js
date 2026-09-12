@@ -66,7 +66,7 @@ async function resolveMenuImages(slug, menu) {
   // CloudFront mode: the app has no business checking the source bucket
   // directly — that's what the origin group is for. Trust the distribution
   // and let a real failure show as a native broken image, which is the
-  // honest signal here (see docs/s3-demo-runbook.md).
+  // honest signal here (see docs/cloudfront-setup.md).
   if (IMAGE_BASE_URL) {
     const base = IMAGE_BASE_URL.replace(/\/$/, "");
     return menu.map((m) => ({ ...m, imagePresent: true, imageUrl: `${base}/${m.imageKey}` }));

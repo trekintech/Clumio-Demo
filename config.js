@@ -19,7 +19,7 @@ export const PORT = Number(process.env.PORT || 5173);
 // bucket for object existence, and the app renders 404 tiles for anything
 // missing. Set to a CloudFront distribution domain once the origin group
 // (source bucket primary, Clumio Instant Access secondary) exists in the
-// console — see docs/s3-demo-runbook.md. In that mode the app trusts
+// console — see docs/cloudfront-setup.md. In that mode the app trusts
 // CloudFront completely and does not peek at the source bucket.
 export const IMAGE_BASE_URL = process.env.IMAGE_BASE_URL || null;
 
