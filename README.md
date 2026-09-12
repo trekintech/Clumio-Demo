@@ -249,18 +249,14 @@ and the argument collapses.
 
 ## Recording
 
-The dashboard polls every four seconds, so recovery appears on screen without
-you touching the browser. Talk over the app and let the data come back on its
-own.
+[docs/running-order.md](docs/running-order.md) has the full shot list:
+segment-by-segment capture order for all three clips, narration beats, the
+claims to avoid, and what to cut in the edit. Work from that on the day.
 
-A capture order that works:
-
-1. Healthy dashboard, sidebar open so the size of the estate is obvious
-2. Run the incident script off camera
-3. Broken dashboard. Hold on it. Let it sit longer than feels comfortable.
-4. Clumio console: set the timestamp, target the partition keys
-5. Back to the dashboard, let the poll bring it round
-6. Terminal, running `npm run verify`
+The essentials: the dashboard polls every four seconds, so breakage and
+recovery both appear without you touching the browser. Hold those shots longer
+than feels comfortable and don't speed them up in the edit — the fact that
+nobody touched anything is the point.
 
 Record with system audio muted and narrate live. Piping laptop audio into a
 venue PA is a risk you don't need.

@@ -1,0 +1,187 @@
+# Running order
+
+Everything is recorded in segments and narrated live from the stage. Nothing
+is performed live, so every wait, deploy and seed gets cut in the edit.
+
+Three clips, in this order: DynamoDB, S3 deletion, S3 overwrite. DynamoDB
+leads because it's the strongest and the easiest to follow.
+
+---
+
+## Before recording day
+
+- [ ] Seed the full estate (`npm run seed`). The sidebar must read 4,127.
+- [ ] Dashboard loads and all eight named tenants are green.
+- [ ] Clumio backup taken. **Nothing is recoverable without this.**
+- [ ] CloudFront distribution built, single S3 origin, OAC, short cache TTL on
+      the menu path.
+- [ ] `IMAGE_BASE_URL` set, server restarted, storefront still healthy through
+      CloudFront.
+- [ ] Dry run of `npm run bad-deploy` → Backtrack → `npm run verify` on the
+      small estate, so nothing about the Clumio console is unfamiliar.
+- [ ] Browser at 100% zoom, bookmarks bar hidden, notifications off.
+- [ ] Two terminals: one running `npm start`, one for commands.
+
+Re-seed after any rehearsal (`npm run seed`) so you record from a clean state.
+
+---
+
+## Clip 1 — DynamoDB, Backtrack
+
+The argument: three restaurants out of four thousand were corrupted. Native
+recovery means restoring the whole table. Backtrack targets just those three,
+to the second, in place.
+
+| Seg | Capture | Doing | Hold for |
+|---|---|---|---|
+| 1A | Dashboard, healthy | Open the tenant sidebar and scroll it | Long enough that 4,127 registers |
+| 1B | Terminal | `npm run bad-deploy` | Until it prints the partition keys |
+| 1C | Dashboard, untouched | Nothing. Let the 4s poll do it | Longer than feels comfortable |
+| 1D | Screen: broken state | Hover the red rows, the £0.00 totals | A slow pass |
+| 1E | Clumio console | Backtrack: paste timestamp + partition keys | Full, unhurried |
+| 1F | Dashboard, untouched | Nothing. Let it come back on its own | Until fully green |
+| 1G | Terminal | `npm run verify` | Until the verdict line |
+
+**Narration beats**
+
+- 1A: "Four thousand one hundred and twenty-seven restaurants. Each one a
+  partition in a single DynamoDB table."
+- 1B: "A pricing service deploy goes wrong. It touches three of them."
+- 1C: **Say nothing for a beat.** Let the screen turn red on its own. Then:
+  "Nobody touched the browser. That's the dashboard polling, and the data
+  underneath it has changed."
+- 1D: "Totals at zero, modifiers stripped, 95% of orders in those three
+  partitions. The other four thousand are untouched — which is the problem,
+  because native recovery doesn't know that."
+- 1E: "Backtrack takes the partition keys and a timestamp. Not the table.
+  These three, to the second, restored in place." Read the values from
+  `incident.json`, on screen — don't recite them from memory.
+- 1F: "Again, nobody touched anything."
+- 1G: "And here's the check that matters: the five tenants outside the blast
+  radius were never modified."
+
+**Traps**
+
+- Don't say the table was restored. It wasn't. Three partitions were.
+- The PITR comparison is worth making, but be precise: native PITR can't do
+  partition-level or in-place recovery, and a PITR backup dies with its table.
+
+**Files on screen:** `incident.json` gives you `recoverToBefore` and
+`partitionKeys`. Have it open in 1E.
+
+---
+
+## Clip 2 — S3 deletion, Instant Access
+
+The argument: the storefront serves its menu from S3. Delete it and the
+restaurant can't trade. Instant Access gets it serving again from the backup
+before anything is restored.
+
+| Seg | Capture | Doing | Hold for |
+|---|---|---|---|
+| 2A | Dashboard, healthy | Point out the S3 path above the menu | A beat on the path |
+| 2B | Terminal | `npm run s3-delete-incident` | Until the object counts print |
+| 2C | Dashboard, untouched | Nothing | Until "Storefront down" appears |
+| 2D | Clumio console | Request Instant Access on the backup | Full |
+| 2E | CloudFront console | Add origin (OAC), create origin group, 403 **and** 404, repoint behaviour | Full. **Cut the deploy wait** |
+| 2F | Dashboard | Storefront trading again | Until clearly back |
+| 2G | *(optional)* Clumio | Restore source objects | Cut the wait |
+
+**Narration beats**
+
+- 2A: "The menu isn't in the database. It's a document published to S3, and
+  the storefront renders from it. That path, there."
+- 2B: "Someone deletes the prefix."
+- 2C: "That's not a broken image. That restaurant cannot show a menu, so it
+  cannot take an order. Existing orders are still there — what's gone is
+  everything they'd have taken from here on."
+- 2D: "Instant Access gives me a read-only view of the backup, at a point in
+  time. I'm not restoring anything yet."
+- 2E: "I add it as a second origin behind CloudFront, and fail over on 403 and
+  404." Say *both codes* out loud — it's the detail an engineer will check.
+- 2F: "Trading again. Nothing has been restored. We're serving the backup
+  while the real recovery runs behind it."
+- 2G: "And because CloudFront retries the primary on every request, as objects
+  come back the traffic drains to the source on its own. No cutover, no moment
+  of deciding it's safe to switch. Then Instant Access gets released — it's a
+  recovery tool, not a second origin you leave running."
+
+**Traps**
+
+- **Do not say "automatic failover, no human intervention."** You built the
+  origin group on camera. The claim is *recovering availability in minutes by
+  serving from the backup*.
+- Writes continuing against the source during recovery is true of a real
+  deployment, not of this app — it has no S3 write path. Say "in a real
+  deployment", don't gesture at the screen.
+- Instant Access is Standard tier only. Not SecureVault Archive.
+
+---
+
+## Clip 3 — S3 overwrite, Backtrack
+
+The argument: failover fires on error codes. Corrupted content returns 200, so
+nothing routes around it. This is the one that separates availability from
+data.
+
+| Seg | Capture | Doing | Hold for |
+|---|---|---|---|
+| 3A | Terminal | `npm run s3-corrupt-incident` | Until counts print |
+| 3B | Dashboard | Garbage tiles, **green banner**, "all present" | Slow pan across both |
+| 3C | Clumio console | Backtrack the object versions | Full |
+| 3D | Dashboard | Artwork back | Until clean |
+
+**Narration beats**
+
+- 3A: "Same three restaurants. This time the objects aren't deleted, they're
+  overwritten."
+- 3B: This is the whole clip. Slow down. "S3 returns 200. The object is there.
+  CloudFront has nothing to fail over on, because nothing is failing. Look at
+  the dashboard — every check is green, assets all present. And look at what
+  the customer sees." Let both be on screen together.
+- 3C: "Backtrack rolls the object back to its previous version. Instant Access
+  wouldn't help here: it solves missing, not wrong."
+- 3D: Brief. The recovery isn't the point of this clip; the contrast is.
+
+**Trap**
+
+- Keep clips 2 and 3 distinct. Deletion is an availability problem CloudFront
+  routes around. Corruption is a data problem nothing routes around, because
+  the bytes are wrong. Blur them and the argument collapses.
+
+---
+
+## Editing
+
+Cut every wait: seeding, CloudFront deploys, Clumio restore progress. Keep the
+4-second poll doing its work — in 1C, 1F and 2C the fact that nothing was
+touched is the point, so don't speed those up or the audience will assume a
+refresh.
+
+Sequence on stage: 1 → 2 → 3. If time is short, drop clip 3 and keep 1 and 2.
+Clip 3 is the most technically interesting and the least visually dramatic,
+so it's the one that survives being told rather than shown.
+
+---
+
+## RDS
+
+There is no RDS scenario in this repo and nothing to record. If it appears in
+the talk it is spoken only, from the Clumio console at most.
+
+If you do mention it: it needs SecureVault Archive and has a thaw period of up
+to 48 hours. It is an audit and compliance story — running SQL against an
+archived backup and exporting the result. Never imply it is fast recovery, and
+never imply Instant Access applies to it.
+
+---
+
+## If something breaks mid-recording
+
+- Dashboard shows a diagnostic panel: it names the fix. Stop, fix, re-record
+  the segment.
+- Heartbeat top right amber or red: AWS stopped answering. Don't keep filming.
+- Deletion appears to do nothing: CloudFront is serving a cached copy.
+  Invalidate the path, re-record.
+- Anything unexpected in `npm run verify`: re-seed and start the clip again
+  rather than recording around it.
