@@ -18,6 +18,10 @@ const ORDERS_PER_TENANT = Number(process.env.ORDERS_PER_TENANT || 150);
 const SYNTHETIC_ORDERS_PER_TENANT = Number(process.env.SYNTHETIC_ORDERS_PER_TENANT || 75);
 const SEED_CONCURRENCY = Number(process.env.SEED_CONCURRENCY || 24);
 
+// Written onto the menu objects so an edge cache can't mask the deletion
+// scenario. Override if you deliberately want to demonstrate edge caching.
+const CACHE_CONTROL = process.env.MENU_CACHE_CONTROL || "no-cache, max-age=0";
+
 function pick(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
@@ -335,7 +339,11 @@ async function seedTenant(tenant, index) {
       Bucket: BUCKET,
       Key: `menu/${tenant.slug}/menu.json`,
       Body: JSON.stringify(menuDoc, null, 2),
-      ContentType: "application/json"
+      ContentType: "application/json",
+      // CloudFront honours origin Cache-Control within its cache policy's TTL
+      // bounds. Without this, an edge can keep serving a deleted object and
+      // the S3 scenario looks like it did nothing at all.
+      CacheControl: CACHE_CONTROL
     })
   );
 
@@ -345,7 +353,8 @@ async function seedTenant(tenant, index) {
         Bucket: BUCKET,
         Key: `menu/${tenant.slug}/${m.id}.svg`,
         Body: menuSvg(m.id, tenant.cuisine),
-        ContentType: "image/svg+xml"
+        ContentType: "image/svg+xml",
+        CacheControl: CACHE_CONTROL
       })
     );
   }

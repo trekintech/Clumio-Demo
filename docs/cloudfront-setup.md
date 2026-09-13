@@ -115,16 +115,55 @@ because CloudFront is only in the read path. The business keeps trading while
 the restore runs. (This demo app has no S3 write path of its own, so that's an
 architectural point rather than something on screen.)
 
-## Watch the cache
+## Turn caching off for the demo
 
-This is the one that ruins takes.
+CloudFront caches successful responses at the edge. If an object was cached
+before you run the deletion, the edge keeps serving it and the deletion appears
+to do nothing. This is the most common way the take is wasted.
 
-CloudFront caches successful responses at the edge. If an object was fetched
-and cached before you run the deletion, the edge keeps serving the cached copy
-until the TTL expires. The deletion appears to do nothing.
+Fix it once, on the behaviour, rather than invalidating before every run:
 
-Set a short TTL on the menu path, or invalidate the affected paths, before
-running the deletion.
+**Behaviors → edit → Cache policy → `CachingDisabled`** (a managed policy: min,
+default and max TTL all zero).
+
+Every request then goes to the origin, so a deletion shows up immediately and
+repeatedly. You lose edge caching, which costs nothing with one viewer, and it
+makes the drain back to primary cleaner to demonstrate because every request
+genuinely re-tries the primary. Failover is unaffected either way: the origin
+group has nothing to do with caching.
+
+If you would rather keep some caching, build a custom policy with min 0,
+default 0, max 1.
+
+The seed also writes `Cache-Control: no-cache, max-age=0` onto the menu objects,
+which CloudFront honours within the cache policy's TTL bounds. That is a second
+line of defence, not a substitute: a cache policy with a non-zero **minimum**
+TTL overrides it. Override with `MENU_CACHE_CONTROL` if you deliberately want to
+demonstrate edge caching.
+
+To clear something already cached, invalidate `/menu/*` in the Invalidations
+tab.
+
+## A deleted object returns 403, not 404
+
+Worth knowing before you set the failover criteria. With OAC, CloudFront's
+principal normally holds `s3:GetObject` and not `s3:ListBucket`. S3 will not
+confirm whether an object ever existed to a caller that cannot list the bucket,
+so it answers **403 Forbidden** for a deleted object rather than 404.
+
+So in practice deletions arrive as 403. If the origin group only fails over on
+404, nothing happens and there is no clue why. That is why both codes are
+required.
+
+You can check what the edge is actually seeing:
+
+```
+curl -sI https://<distribution-id>.cloudfront.net/menu/alma-kitchen/menu.json
+```
+
+`X-Cache: Error from cloudfront` with a 403 means CloudFront reached S3 and S3
+denied it, which is the deletion working. `X-Cache: Hit from cloudfront` means
+you are looking at a cached copy and the deletion is being masked.
 
 ## Getting the "before" shot without CloudFront
 

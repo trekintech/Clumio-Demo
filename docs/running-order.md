@@ -13,8 +13,9 @@ leads because it's the strongest and the easiest to follow.
 - [ ] Seed the full estate (`npm run seed`). The sidebar must read 4,127.
 - [ ] Dashboard loads and all eight named tenants are green.
 - [ ] Clumio backup taken. **Nothing is recoverable without this.**
-- [ ] CloudFront distribution built, single S3 origin, OAC, short cache TTL on
-      the menu path.
+- [ ] CloudFront distribution built: single S3 origin, OAC, and the cache
+      policy set to `CachingDisabled`. Without that an edge cache can serve the
+      deleted objects and the incident appears to do nothing.
 - [ ] `IMAGE_BASE_URL` set and the server restarted. Confirm it took: startup
       must print `Menu and artwork via CloudFront: …`. If it says "read
       directly from S3", the variable didn't get set — on PowerShell it's

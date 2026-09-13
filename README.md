@@ -146,9 +146,11 @@ $env:IMAGE_BASE_URL = "https://<distribution-id>.cloudfront.net"
 npm start
 ```
 
-Set a short cache TTL on the menu path while you're in there. If CloudFront is
-still serving a cached copy when you run the deletion, nothing visible happens
-and the take is wasted. Full steps are in
+While you're in there, set the behaviour's cache policy to `CachingDisabled`.
+If an edge is still serving a cached copy when you run the deletion, nothing
+visible happens and the take is wasted. Also worth knowing: with OAC a deleted
+object comes back as **403**, not 404, which is why the origin group later needs
+both codes. Full steps are in
 [docs/cloudfront-setup.md](docs/cloudfront-setup.md).
 
 ### Scenario 1: DynamoDB corruption
