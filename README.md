@@ -491,5 +491,6 @@ alone is usually cheaper than tearing down and re-seeding.
 - Menu artwork is generated SVG, hand-drawn per dish, not photography. See
   `DISH_ICONS` in `scripts/seed.js`. It holds up at 1080p, but swap in real
   photography if you want the gallery to look richer.
-- There is no RDS scenario in this repo. The third capability in the wider
-  story (SQL against an archived backup) has no code here.
+- The RDS scenario lives in [docs/rds-audit-scenario.md](docs/rds-audit-scenario.md)
+  with its SQL in `sql/`. It needs an RDS instance you provision yourself, and
+  the Archive thaw means it has to be prepared days ahead.

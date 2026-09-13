@@ -170,13 +170,13 @@ so it's the one that survives being told rather than shown.
 
 ## RDS
 
-There is no RDS scenario in this repo and nothing to record. If it appears in
-the talk it is spoken only, from the Clumio console at most.
+Recorded separately, and it has to be prepared days ahead: the Archive thaw
+takes up to 48 hours, so request it at least two days before you film.
 
-If you do mention it: it needs SecureVault Archive and has a thaw period of up
-to 48 hours. It is an audit and compliance story — running SQL against an
-archived backup and exporting the result. Never imply it is fast recovery, and
-never imply Instant Access applies to it.
+Full shot list, narration and SQL are in
+[rds-audit-scenario.md](rds-audit-scenario.md). It is an audit and compliance
+story, not recovery speed. Never imply it is fast, and never imply Instant
+Access applies to it — that is Standard tier and a different capability.
 
 ---
 

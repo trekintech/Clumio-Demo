@@ -86,6 +86,10 @@ post on Clumio Backtrack for DynamoDB (August 2025).
   radius were untouched. This output gets filmed.
 - `scripts/teardown.js` — deletes the table and bucket. Dry-run unless the
   bucket name is passed back as an argument. See Cost and cleanup.
+- `sql/` — the RDS audit scenario: schema and generated Q1 2025 trading, the
+  retention purge, and the audit query. Nothing in the app touches RDS; it is
+  a separate instance you provision, queried only through the Clumio console.
+  See `docs/rds-audit-scenario.md`.
 
 The demo procedure lives in `README.md`. `docs/cloudfront-setup.md` covers
 only the one-off CloudFront origin-group build, so the README can be read

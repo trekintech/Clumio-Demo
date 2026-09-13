@@ -203,5 +203,6 @@ Archive.
 That matters for the wider three-part story, because the RDS capability depends
 on Archive and its thaw window, which is why it's told as an audit and
 compliance story rather than a fast-recovery one. Don't imply Instant Access
-could apply to the RDS scenario. (There's no RDS code in this repo.)
+could apply to the RDS scenario. That one is in
+[docs/rds-audit-scenario.md](rds-audit-scenario.md).
 
