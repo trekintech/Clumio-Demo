@@ -74,10 +74,14 @@ for either:
 
 Don't let the first run be the 314,000-item one.
 
+**macOS / Linux**
+
 ```bash
 SYNTHETIC_TENANT_COUNT=50 npm run seed
 SYNTHETIC_TENANT_COUNT=50 npm start
 ```
+
+**Windows PowerShell**
 
 ```powershell
 $env:SYNTHETIC_TENANT_COUNT = "50"
@@ -128,10 +132,14 @@ yet — that gets created during the demo, as the recovery.
 
 Then point the app at it and restart:
 
+**macOS / Linux**
+
 ```bash
 export IMAGE_BASE_URL=https://<distribution-id>.cloudfront.net
 npm start
 ```
+
+**Windows PowerShell**
 
 ```powershell
 $env:IMAGE_BASE_URL = "https://<distribution-id>.cloudfront.net"
@@ -293,10 +301,14 @@ out why setup couldn't.
 If you already have a working profile, use it. Nothing here needs a dedicated
 one.
 
+**macOS / Linux**
+
 ```bash
 export AWS_PROFILE=your-profile
 npm run check-access
 ```
+
+**Windows PowerShell**
 
 ```powershell
 $env:AWS_PROFILE = "your-profile"
@@ -395,9 +407,13 @@ start again.
 It keeps serving the files it started with, so after pulling a change you can
 be looking at the old version and think the fix didn't work.
 
+**macOS / Linux**
+
 ```bash
 lsof -ti tcp:5173 | xargs kill
 ```
+
+**Windows PowerShell**
 
 ```powershell
 Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force

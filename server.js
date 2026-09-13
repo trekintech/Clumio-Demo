@@ -152,6 +152,14 @@ app.get("/api/tenant/:slug", async (req, res) => {
 const server = app.listen(PORT, () => {
   console.log(`Kerbside ops running on http://localhost:${PORT}`);
   console.log(`Reading ${TABLE} and ${BUCKET} in ${REGION}`);
+  // Say which mode this is. IMAGE_BASE_URL is easy to fail to set (the export
+  // vs $env: trap on Windows), and without this the only clue is the S3
+  // scenario quietly behaving as though CloudFront isn't there - which it isn't.
+  if (IMAGE_BASE_URL) {
+    console.log(`Menu and artwork via CloudFront: ${IMAGE_BASE_URL}`);
+  } else {
+    console.log("Menu and artwork read directly from S3 (IMAGE_BASE_URL not set)");
+  }
 });
 
 // Without this, a port clash prints an unhandled 'error' event and a stack

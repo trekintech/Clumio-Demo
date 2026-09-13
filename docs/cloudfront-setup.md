@@ -49,10 +49,14 @@ group yet.
 
 Then point the app at it and restart:
 
+**macOS / Linux**
+
 ```bash
 export IMAGE_BASE_URL=https://<distribution-id>.cloudfront.net
 npm start
 ```
+
+**Windows PowerShell**
 
 ```powershell
 $env:IMAGE_BASE_URL = "https://<distribution-id>.cloudfront.net"

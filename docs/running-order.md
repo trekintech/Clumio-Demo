@@ -15,8 +15,11 @@ leads because it's the strongest and the easiest to follow.
 - [ ] Clumio backup taken. **Nothing is recoverable without this.**
 - [ ] CloudFront distribution built, single S3 origin, OAC, short cache TTL on
       the menu path.
-- [ ] `IMAGE_BASE_URL` set, server restarted, storefront still healthy through
-      CloudFront.
+- [ ] `IMAGE_BASE_URL` set and the server restarted. Confirm it took: startup
+      must print `Menu and artwork via CloudFront: …`. If it says "read
+      directly from S3", the variable didn't get set — on PowerShell it's
+      `$env:IMAGE_BASE_URL = "..."`, not `export`. The dashboard's menu source
+      line should show the CloudFront URL too.
 - [ ] Dry run of `npm run bad-deploy` → Backtrack → `npm run verify` on the
       small estate, so nothing about the Clumio console is unfamiliar.
 - [ ] Browser at 100% zoom, bookmarks bar hidden, notifications off.
