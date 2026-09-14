@@ -284,6 +284,47 @@ This does not run in pgAdmin. It goes in the **Clumio query editor**, against
 the backup taken in step 5. The full file is `sql/03-audit-query.sql`, which
 holds five queries.
 
+That editor is stricter than pgAdmin, and the file is written for it:
+
+- **SELECT statements only.** There is no `SET`, so `search_path` is not
+  available and every table is written out as `kerbside_finance.settlements`
+  rather than `settlements`.
+- **Addressing is `<database>.<table>`**, two-part, set by the **Default
+  database name** dropdown at the top. Open that dropdown before you type
+  anything and see what it lists.
+- **Paste one query at a time.** Not the whole file.
+- The SQL is kept to plain ANSI — `CAST(x AS DATE)` rather than `x::date`, no
+  `to_char`, no `FILTER` — so it does not depend on the engine behind the
+  editor being Postgres.
+
+### If it returns nothing
+
+Run the smallest possible query first. It tells you whether the editor can see
+the table at all, which is a different problem from your query being wrong:
+
+```sql
+SELECT COUNT(*) FROM kerbside_finance.settlements
+```
+
+Expect **23000**. Working through it from there:
+
+1. **Did you leave `SET search_path` in?** It is not a SELECT. Drop it, and
+   qualify the table names instead. This is the most likely cause.
+2. **Is the right database selected?** The dropdown defaults to whatever it
+   found first, which may be an unrelated database on the same instance. If the
+   dropdown lists `kerbside_finance`, select it and the prefix becomes
+   optional. If it lists the database you loaded into instead, keep the prefix.
+3. **Try the name three ways**: `kerbside_finance.settlements`, then
+   `settlements` unqualified with the right database selected, then
+   `"kerbside_finance"."settlements"` quoted.
+4. **Check the backup is newer than the load.** The backup timestamp is shown
+   at the top of the same panel. If you backed up before running
+   `01-schema-and-data.sql`, the tables are genuinely not in it and no amount
+   of query fiddling will help. Take the backup again.
+
+The red wavy underlines in the editor are the browser's spellchecker on a plain
+textarea, not SQL errors. Ignore them.
+
 **Query 1 — the payouts in dispute.** The same four rows as step 4, plus the
 commission rate and payout reference. This is the one that answers the
 accountant.
@@ -309,9 +350,10 @@ Four consecutive days where charged and refunded are the same number, including
 the Friday and Saturday that carry the week. Nobody needs the story explained
 after seeing that.
 
-**Query 4 — the baskets behind the three largest cancelled orders.** Dish,
-quantity, unit price. The answer to "how do we know these refunds were real
-orders and not an adjustment someone posted".
+**Query 4 — the baskets behind the cancelled orders over £50.** 19 rows:
+dish, quantity, unit price, joined into the 2 million order lines. The answer
+to "how do we know these refunds were real orders and not an adjustment
+someone posted".
 
 **Query 5 — the one-line answer**, for when it gets asked a third time:
 
@@ -338,7 +380,7 @@ order and it builds. Shoot it as "here is a query tool" and it dies.
 | R2 | Clumio console | The archived backup | — |
 | R3 | Clumio query editor | Query 1: the four February payouts | 4 |
 | R4 | Clumio query editor | Query 3: the same week by day | 7 |
-| R5 | Clumio query editor | Query 4: the baskets behind the cancellations | 9 |
+| R5 | Clumio query editor | Query 4: the baskets behind the cancellations | 19 |
 | R6 | Clumio query editor | Query 2: the refunds itemised | 27 |
 | R7 | Export | Download as CSV, open it | — |
 
