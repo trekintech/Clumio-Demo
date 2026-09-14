@@ -36,6 +36,25 @@ The argument: three restaurants out of four thousand were corrupted. Native
 recovery means restoring the whole table. Backtrack targets just those three,
 to the second, in place.
 
+**Commercial framing, for the slide:**
+
+> A bad pricing deploy corrupted three restaurants out of 4,127. Order totals
+> now read £0.00, modifiers are stripped, and every invoice and payout
+> calculated from those three partitions is wrong. Native recovery means
+> restoring the whole table: rewinding 310,000 orders to fix 427.
+
+The platform is still up and still taking orders, so this isn't lost trade.
+It's that the money is wrong and nobody can tell which figures to trust. The
+collateral of the only native fix is the line worth saying out loud: to repair
+0.14% of the data you discard everything the other 4,124 restaurants did since
+the restore point.
+
+| | |
+|---|---|
+| Restaurants affected | 3 of 4,127 |
+| Orders corrupted | ~427 of 310,125, so 0.14% |
+| Corruption | 95% of orders per partition, tagged `pricing-svc@4.11.2` |
+
 | Seg | Capture | Doing | Hold for |
 |---|---|---|---|
 | 1A | Dashboard, healthy | Open the tenant sidebar and scroll it | Long enough that 4,127 registers |
@@ -80,6 +99,30 @@ to the second, in place.
 The argument: the storefront serves its menu from S3. Delete it and the
 restaurant can't trade. Instant Access gets it serving again from the backup
 before anything is restored.
+
+**Commercial framing, for the slide:**
+
+> Three restaurants can't serve a menu, so they can't take a single order.
+> That's roughly £430 a day of trade stopped dead, and it keeps accruing until
+> someone fixes it, while their order history sits there perfectly intact.
+
+The opposite shape to clip 1. Nothing is wrong with the data, there just isn't
+any new data. Prospective revenue rather than corrupted revenue, which is why
+Instant Access is the right answer here: you restart the revenue before you
+restore the data.
+
+| Restaurant | Typical week | Orders/week |
+|---|---|---|
+| Alma Kitchen | £1,445.18 | 44.9 |
+| Brick Lane Grill | £1,188.67 | 43.6 |
+| Corner Pantry | £383.28 | 20.8 |
+| Combined | £3,017.13 | ~109 |
+
+Averaged across normal trading weeks with the incident week excluded, from the
+finance ledger in `sql/`. £3,017 a week is £431 a day. Note the ledger holds
+250 restaurants while the app shows 4,127: the three here exist in both with
+the same slugs, and if anyone cross-references the counts, the ledger is one
+trading entity's settlements rather than the whole estate.
 
 | Seg | Capture | Doing | Hold for |
 |---|---|---|---|
@@ -152,6 +195,19 @@ data.
 - Keep clips 2 and 3 distinct. Deletion is an availability problem CloudFront
   routes around. Corruption is a data problem nothing routes around, because
   the bytes are wrong. Blur them and the argument collapses.
+
+---
+
+## The three clips side by side
+
+Worth being explicit, because it's the spine of the set.
+
+| Clip | What's broken | Commercial shape |
+|---|---|---|
+| DynamoDB | Data is wrong, platform is up | Wrong money. Every downstream figure is untrustworthy |
+| S3 delete | Data is missing, platform is down | No money. £431/day, accruing |
+| S3 overwrite | Data is wrong, every check says green | Wrong money, and nothing alerts on it |
+| RDS | Data is gone by design, nothing is broken | No answer. An unanswerable audit question |
 
 ---
 
