@@ -130,10 +130,15 @@ JOIN (
 WHERE o.gross <> s.gross_pence OR o.refunds <> s.refunds_pence;
 
 -- What the auditor will ask about later, as it stands today.
+--
+-- Commission is in the output deliberately. Net is gross - refunds -
+-- commission, so without that column the row reads as though it does not
+-- reconcile.
 SELECT period_start AS week_beginning,
-       ROUND(gross_pence   / 100.0, 2) AS gross_gbp,
-       ROUND(refunds_pence / 100.0, 2) AS refunds_gbp,
-       ROUND(net_paid_pence/ 100.0, 2) AS net_paid_gbp
+       ROUND(gross_pence      / 100.0, 2) AS gross_gbp,
+       ROUND(refunds_pence    / 100.0, 2) AS refunds_gbp,
+       ROUND(commission_pence / 100.0, 2) AS commission_gbp,
+       ROUND(net_paid_pence   / 100.0, 2) AS net_paid_gbp
 FROM settlements
 WHERE tenant_slug = 'alma-kitchen'
   AND period_start BETWEEN DATE '2025-02-01' AND DATE '2025-02-28'

@@ -156,10 +156,11 @@ against production while the data is still there:
 ```sql
 SET search_path TO kerbside_finance;
 
-SELECT period_start                        AS week_beginning,
-       ROUND(gross_pence    / 100.0, 2)    AS gross_gbp,
-       ROUND(refunds_pence  / 100.0, 2)    AS refunds_gbp,
-       ROUND(net_paid_pence / 100.0, 2)    AS net_paid_gbp
+SELECT period_start                          AS week_beginning,
+       ROUND(gross_pence      / 100.0, 2)    AS gross_gbp,
+       ROUND(refunds_pence    / 100.0, 2)    AS refunds_gbp,
+       ROUND(commission_pence / 100.0, 2)    AS commission_gbp,
+       ROUND(net_paid_pence   / 100.0, 2)    AS net_paid_gbp
 FROM settlements
 WHERE tenant_slug = 'alma-kitchen'
   AND period_start BETWEEN DATE '2025-02-01' AND DATE '2025-02-28'
@@ -168,12 +169,18 @@ ORDER BY period_start;
 
 Expected, exactly:
 
-| week_beginning | gross_gbp | refunds_gbp | net_paid_gbp |
-|---|---|---|---|
-| 2025-02-03 | 384.56 | 0.00 | 315.34 |
-| 2025-02-10 | 390.07 | 184.70 | **168.40** |
-| 2025-02-17 | 395.58 | 5.44 | 319.91 |
-| 2025-02-24 | 401.09 | 0.00 | 328.89 |
+| week_beginning | gross_gbp | refunds_gbp | commission_gbp | net_paid_gbp |
+|---|---|---|---|---|
+| 2025-02-03 | 384.56 | 0.00 | 69.22 | 315.34 |
+| 2025-02-10 | 390.07 | 184.70 | 36.97 | **168.40** |
+| 2025-02-17 | 395.58 | 5.44 | 70.23 | 319.91 |
+| 2025-02-24 | 401.09 | 0.00 | 72.20 | 328.89 |
+
+Always show the commission column. Net is
+`gross - refunds - commission`, and Kerbside takes 18% of what is left after
+refunds, so 390.07 - 184.70 = 205.37, less 36.97 commission, pays 168.40. Drop
+the commission column and the row looks like it does not add up, which is the
+last thing you want an auditor's arithmetic to do on camera.
 
 If 10 February reads £168.40 against roughly £320 either side, the data is
 right and everything downstream will work. If it doesn't, stop here rather than
@@ -212,8 +219,11 @@ retention has taken the answer away:
 ```sql
 SET search_path TO kerbside_finance;
 
-SELECT period_start                     AS week_beginning,
-       ROUND(net_paid_pence / 100.0, 2) AS net_paid_gbp
+SELECT period_start                          AS week_beginning,
+       ROUND(gross_pence      / 100.0, 2)    AS gross_gbp,
+       ROUND(refunds_pence    / 100.0, 2)    AS refunds_gbp,
+       ROUND(commission_pence / 100.0, 2)    AS commission_gbp,
+       ROUND(net_paid_pence   / 100.0, 2)    AS net_paid_gbp
 FROM settlements
 WHERE tenant_slug = 'alma-kitchen'
   AND period_start BETWEEN DATE '2025-02-01' AND DATE '2025-02-28'

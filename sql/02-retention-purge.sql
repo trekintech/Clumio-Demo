@@ -29,7 +29,10 @@ SELECT 'remaining rows before the cutoff' AS note,
 -- This is the shot: the query is correct, the database simply no longer holds
 -- the answer.
 SELECT s.period_start AS week_beginning,
-       ROUND(s.net_paid_pence / 100.0, 2) AS net_paid_gbp
+       ROUND(s.gross_pence      / 100.0, 2) AS gross_gbp,
+       ROUND(s.refunds_pence    / 100.0, 2) AS refunds_gbp,
+       ROUND(s.commission_pence / 100.0, 2) AS commission_gbp,
+       ROUND(s.net_paid_pence   / 100.0, 2) AS net_paid_gbp
 FROM settlements s
 WHERE s.tenant_slug = 'alma-kitchen'
   AND s.period_start BETWEEN DATE '2025-02-01' AND DATE '2025-02-28'
