@@ -186,7 +186,7 @@ which is the check you want behind you before you stand up.
 
 The storefront renders its menu from a document published to S3 at
 `menu/<slug>/menu.json`. The menu is not in DynamoDB. Lose that object and the
-restaurant cannot show a menu, so it cannot take orders.
+restaurant can't show a menu, so it can't take orders.
 
 ```
 npm run s3-delete-incident
@@ -196,7 +196,7 @@ Deletes everything under `menu/<slug>/` plus the settlement exports for the
 same three tenants. S3 returns 403 or 404 for those keys from then on.
 
 Those three restaurants go down. The dashboard says "Storefront down — menu
-unavailable" and states they cannot take orders. Historical orders still show,
+unavailable" and says they can't take orders. Historical orders still show,
 so what's lost is future revenue.
 
 Now the recovery, in the console:
@@ -222,7 +222,7 @@ has no S3 write path, so that second one is an architectural point rather than
 something you can point at.)
 
 Be accurate about the claim. This demonstrates recovering availability in
-minutes by serving from your backup. It is not automatic failover with no human
+minutes by serving from your backup. It isn't automatic failover with no human
 intervention, because you built the group live. Both are true of the product;
 only one is true of what's on screen.
 
@@ -247,7 +247,7 @@ failover doesn't help here.
 Worth saying out loud on stage: the dashboard still reports these tenants
 healthy. Green banner, assets all present, while the customer is looking at
 garbage. Every error-code-based check passes. That is exactly why an
-availability mechanism cannot fix a data problem.
+availability mechanism can't fix a data problem.
 
 Recovery is Backtrack, rolling the object back to its previous version. Not
 Instant Access, which only helps when something is missing rather than wrong.
@@ -348,7 +348,7 @@ refresh and expire mid-demo without warning.
 
 ### Checking permissions
 
-Credentials resolving is not the same as having permission. A role can
+Credentials resolving isn't the same as having permission. A role can
 authenticate perfectly and still be unable to create a table.
 
 ```
@@ -459,7 +459,7 @@ Typing the exact name is the safety catch. Anything else stays a dry run.
 properly, including every object version and delete marker, and disables PITR
 before deleting the table so backup charges stop straight away.
 
-It does not touch your CloudFront distribution or your Clumio backups, since
+It doesn't touch your CloudFront distribution or your Clumio backups, since
 it didn't create either. Remove those in their own consoles.
 
 ### What actually costs anything

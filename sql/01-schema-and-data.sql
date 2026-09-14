@@ -5,7 +5,7 @@
 --
 --   psql -h <endpoint> -U <user> -d <database> -f sql/01-schema-and-data.sql
 --
--- Everything lives in its own schema, so it cannot collide with anything else
+-- Everything lives in its own schema, so it can't collide with anything else
 -- already on the instance and is trivial to remove afterwards.
 --
 -- Generates the settlement ledger for 250 restaurants from January 2025 to
@@ -211,7 +211,7 @@ FROM tenants;
 -- How busy each restaurant is, before day-of-week and seasonal effects.
 --
 -- The ordinal gives every restaurant its own order_id block, so a restaurant's
--- orders do not shift when the estate size changes. Dial tenant_count down for
+-- orders don't shift when the estate size changes. Dial tenant_count down for
 -- a quick local run and Alma Kitchen's figures still come out the same.
 CREATE TABLE gen_profile AS
 SELECT t.tenant_slug,
@@ -299,7 +299,7 @@ CROSS JOIN LATERAL (
 
 -- Now the order totals, built from the lines so the two can never disagree.
 -- VAT is the 20% element already inside the food and delivery charge; tips are
--- outside the scope of VAT. It is recorded for audit and does not enter the
+-- outside the scope of VAT. It's recorded for audit and doesn't enter the
 -- settlement, which is gross less refunds less commission.
 INSERT INTO orders (order_id, tenant_slug, placed_at, channel, payment_method, card_last4,
                     items_pence, delivery_fee_pence, tip_pence, gross_pence, vat_pence)
@@ -406,8 +406,8 @@ DROP TABLE gen_profile;
 DROP TABLE gen_params;
 
 -- ---------------------------------------------------------------------------
--- Every one of these must report zero failures. If any does not, stop: do not
--- take a backup of numbers that do not reconcile.
+-- Every one of these must report zero failures. If any of them doesn't, stop.
+-- Don't take a backup of numbers that don't reconcile.
 -- ---------------------------------------------------------------------------
 SELECT 'settlement internal maths' AS check_name, COUNT(*) AS failures
   FROM settlements

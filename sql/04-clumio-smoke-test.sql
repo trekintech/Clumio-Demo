@@ -8,7 +8,7 @@
 -- dataset 01-schema-and-data.sql generates. Exactly one failed: 5b. Re-run
 -- them after any change to the data or a Clumio upgrade, not before.
 --
--- Why this file exists: that editor is not Postgres. An unaliased column comes
+-- Why this file exists: that editor isn't Postgres. An unaliased column comes
 -- back as _col0 and the schema browser reports Hive/Trino types - bigint, int,
 -- string - so date and timestamp columns arrive as STRINGS. Anything written
 -- against Postgres semantics is a guess until it has run here.
@@ -16,8 +16,8 @@
 -- SETUP
 --
 --   The schema browser on the left lists all six tables with a copy icon
---   beside each name. Use it: the generated names are long and change with
---   every backup. Replace these three tokens:
+--   beside each name. Use it, because the generated names are long and change
+--   with every backup. Replace these three tokens:
 --
 --     SETTLEMENTS_TABLE   ->  kerbside_finance_settlements_...
 --     ORDERS_TABLE        ->  kerbside_finance_orders_...
@@ -29,7 +29,7 @@
 -- WHAT TO RECORD AS YOU GO
 --
 --   For each query: the result, or the error text. Queries 3 and 4 decide how
---   every date filter in 03-audit-query.sql has to be written, so do not skip
+--   every date filter in 03-audit-query.sql has to be written, so don't skip
 --   them even if 1 and 2 look fine.
 
 

@@ -1,6 +1,6 @@
 -- The audit query. Run in the CLUMIO QUERY EDITOR, against the archived
--- backup. Not in pgAdmin, and not against production, where these rows no
--- longer exist.
+-- backup. Not in pgAdmin, and not against production, where these rows don't
+-- exist any more.
 --
 -- The question: Alma Kitchen's accountant says their February 2025 payouts
 -- were short. Prove what was paid, and why.
@@ -8,7 +8,7 @@
 -- ---------------------------------------------------------------------------
 -- BEFORE YOU RUN THIS: replace the three table tokens.
 --
--- Clumio does not expose the tables under their own names. It flattens schema
+-- Clumio doesn't expose the tables under their own names. It flattens schema
 -- and table into one generated identifier, per backup:
 --
 --   kerbside_finance_settlements_dda39285_20260914_2c2e2d1db06211f19fc1f21...
@@ -16,7 +16,7 @@
 --      schema           table       id     backup       backup job id
 --                                          date
 --
--- The suffix changes every time you take a backup, so these names cannot live
+-- The suffix changes every time you take a backup, so these names can't live
 -- in the repo. Get them from the table picker in the console and find-replace:
 --
 --   SETTLEMENTS_TABLE   ->  kerbside_finance_settlements_...
@@ -24,17 +24,17 @@
 --   ORDER_ITEMS_TABLE   ->  kerbside_finance_order_items_...
 --
 -- Set "Default database name" to the matching
--- kerbside_..._rds_<account>_<region>_instance_<resource> entry and you do not
+-- kerbside_..._rds_<account>_<region>_instance_<resource> entry and you won't
 -- need to prefix the database as well.
 --
 -- Other rules that editor enforces:
 --
---   * SELECT statements only. No SET, so there is no search_path to lean on.
+--   * SELECT statements only. No SET, so there's no search_path to lean on.
 --   * Paste ONE query at a time. Not the whole file.
---   * The engine is not Postgres. An unaliased column comes back as _col0,
+--   * The engine isn't Postgres. An unaliased column comes back as _col0,
 --     which is the Presto/Trino convention, so this file sticks to plain ANSI:
 --     CAST rather than ::, no to_char, no FILTER, no alias called "day".
---   * Dates and timestamps arrive as STRINGS, and there is no implicit
+--   * Dates and timestamps arrive as STRINGS, and there's no implicit
 --     coercion. Tested in the console:
 --
 --       period_start BETWEEN DATE '...' AND DATE '...'              ERRORS
@@ -44,14 +44,14 @@
 --       SUBSTR(placed_at, 1, 10) = '2025-02-15'                     works
 --
 --     So: cast the column, or compare strings to strings. Never put a bare
---     column next to a DATE literal - that is the one combination that
---     errors, and it is easy to reintroduce.
+--     column next to a DATE literal, which is the one combination that
+--     errors, and it's easy to put back without noticing.
 --
 --     This file uses SUBSTR for placed_at and CAST for period_start, which
 --     are the two forms actually run in the console. SUBSTR is also immune to
---     the timestamp format, which CAST is not. Note that SUBSTR on placed_at
---     will NOT run in Postgres, where that column is a real timestamp - these
---     queries target the Clumio editor and nothing else.
+--     the timestamp format, which CAST does. Note that SUBSTR on placed_at
+--     won't run in Postgres, where that column is a real timestamp. These
+--     queries are for the Clumio editor and nothing else.
 --
 --     Verified against the live console: every query below returns the row
 --     counts and figures quoted in docs/rds-audit-scenario.md.
@@ -106,7 +106,7 @@ ORDER BY o.placed_at;
 
 
 -- 3. The same week by day.   [RECORDED - segment R4. The shot that carries it]
--- Trading stops dead on the 12th and does not resume until the 16th.
+-- Trading stops dead on the 12th and doesn't resume until the 16th.
 SELECT
   SUBSTR(o.placed_at, 1, 10)                          AS order_day,
   COUNT(*)                                            AS orders,
@@ -142,7 +142,7 @@ WHERE o.tenant_slug = 'alma-kitchen'
 ORDER BY o.gross_pence DESC, o.order_id, oi.order_item_id;
 
 
--- 5. The one-line answer.   [NOT recorded - for when it is asked from the floor]
+-- 5. The one-line answer.   [NOT recorded - for when it's asked from the floor]
 SELECT
   o.refund_reason,
   COUNT(*)                              AS refunded_orders,
@@ -162,7 +162,7 @@ ORDER BY 3 DESC;
 --
 --   SELECT COUNT(*) FROM SETTLEMENTS_TABLE
 --
--- Expect 23000. If it errors, the name is wrong rather than the query: go back
--- to the table picker and copy it again. If it returns 0, the backup is older
--- than the data load and you need to take it again.
+-- Expect 23000. If it errors the name's wrong rather than the query, so go
+-- back to the table picker and copy it again. If it returns 0 the backup is
+-- older than the data load, and you need to take it again.
 -- ---------------------------------------------------------------------------

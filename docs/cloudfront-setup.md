@@ -21,9 +21,9 @@ runs.
 
 ## The shape of the demo
 
-Instant Access gives you a read-only view of the backup at a point in time. It
-is a recovery and audit tool, not a permanent second origin: you stand it up
-to keep serving while the source is restored, and you take it down afterwards.
+Instant Access gives you a read-only view of the backup at a point in time.
+It's a recovery and audit tool, not a permanent second origin. You stand it up
+to keep serving while the source is restored, then take it down afterwards.
 That shapes the whole scenario.
 
 So the distribution starts with **one origin**, the source bucket. The deletion
@@ -31,10 +31,10 @@ is then a genuine outage, and standing up Instant Access as a second origin is
 the recovery. The storefront serves from the backup copy while the real restore
 runs behind it, then drains back to the source.
 
-That is also the honest claim to make on stage: *recover availability in
-minutes by serving from your backup, before restoring a single object.* Not
-"automatic failover with no human intervention", which would require the group
-to already exist and a permanent secondary origin you would not actually run.
+That's also the honest claim to make on stage: *recover availability in minutes
+by serving from your backup, before restoring a single object.* Not "automatic
+failover with no human intervention", which would need the group to already
+exist and a permanent secondary origin nobody would actually run.
 
 CloudFront changes take a few minutes to deploy. That's fine here because the
 footage is recorded and narrated live, so the wait gets cut.
@@ -74,7 +74,7 @@ npm run s3-delete-incident
 
 S3 returns 403 or 404 for those keys, CloudFront has nothing to fall back to,
 and the three blast-radius restaurants go dark. The dashboard says the menu is
-unreachable and that they cannot take orders.
+unreachable and that they can't take orders.
 
 ### The recovery
 
@@ -101,9 +101,9 @@ the previous one. So when you restore the source objects, requests start being
 served from primary again the moment each object is back. Failover traffic
 drains to zero on its own as the restore progresses.
 
-There is no switch to flip, no moment where you decide it's safe to go back,
-and no window where the two origins disagree about which is authoritative.
-That is the part worth drawing out on stage: the transition manages itself.
+There's no switch to flip, no moment where you decide it's safe to go back, and
+no window where the two origins disagree about which is authoritative. That's
+the part to draw out on stage. The transition manages itself.
 
 Once the restore is complete and nothing is reaching the secondary any more,
 repoint the behaviour at the bucket origin and release the Instant Access
@@ -132,14 +132,14 @@ makes the drain back to primary cleaner to demonstrate because every request
 genuinely re-tries the primary. Failover is unaffected either way: the origin
 group has nothing to do with caching.
 
-If you would rather keep some caching, build a custom policy with min 0,
-default 0, max 1.
+If you'd rather keep some caching, build a custom policy with min 0, default 0,
+max 1.
 
 The seed also writes `Cache-Control: no-cache, max-age=0` onto the menu objects,
-which CloudFront honours within the cache policy's TTL bounds. That is a second
-line of defence, not a substitute: a cache policy with a non-zero **minimum**
-TTL overrides it. Override with `MENU_CACHE_CONTROL` if you deliberately want to
-demonstrate edge caching.
+which CloudFront honours within the cache policy's TTL bounds. That's a second
+line of defence rather than a substitute, because a cache policy with a
+non-zero **minimum** TTL overrides it. Use `MENU_CACHE_CONTROL` if you
+deliberately want to demonstrate edge caching.
 
 To clear something already cached, invalidate `/menu/*` in the Invalidations
 tab.
@@ -147,12 +147,12 @@ tab.
 ## A deleted object returns 403, not 404
 
 Worth knowing before you set the failover criteria. With OAC, CloudFront's
-principal normally holds `s3:GetObject` and not `s3:ListBucket`. S3 will not
-confirm whether an object ever existed to a caller that cannot list the bucket,
+principal normally holds `s3:GetObject` and not `s3:ListBucket`. S3 won't
+confirm whether an object ever existed to a caller that can't list the bucket,
 so it answers **403 Forbidden** for a deleted object rather than 404.
 
 So in practice deletions arrive as 403. If the origin group only fails over on
-404, nothing happens and there is no clue why. That is why both codes are
+404, nothing happens and there's no clue why. That's why both codes are
 required.
 
 You can check what the edge is actually seeing:
@@ -163,7 +163,7 @@ curl -sI https://<distribution-id>.cloudfront.net/menu/alma-kitchen/menu.json
 
 `X-Cache: Error from cloudfront` with a 403 means CloudFront reached S3 and S3
 denied it, which is the deletion working. `X-Cache: Hit from cloudfront` means
-you are looking at a cached copy and the deletion is being masked.
+you're looking at a cached copy and the deletion is being masked.
 
 ## Getting the "before" shot without CloudFront
 
@@ -197,7 +197,7 @@ around, because the bytes themselves are wrong.
 
 ## Tier constraint
 
-Instant Access is Standard tier only. It is not supported on SecureVault
+Instant Access is Standard tier only. It isn't supported on SecureVault
 Archive.
 
 That matters for the wider three-part story, because the RDS capability sits on
