@@ -269,6 +269,51 @@ And underneath it:
 
 ---
 
+## Slide copy: the four asks
+
+Short version for the deck, if the slides are carrying the asks and the footage
+is carrying the answers. Each ask comes out of what the previous query showed,
+so the order matters.
+
+**Slide 1, the framing**
+
+> It's September 2026. Alma Kitchen's accountant says their February 2025
+> payouts were short and wants it explained.
+>
+> We keep 13 months of finance data. Those rows left production seven months
+> ago, so nobody here can answer him.
+
+**Slide 2, first ask** (then run query 1)
+
+> Start with the obvious question: what did we actually pay them that month?
+>
+> Four rows would settle it. They're in the backup, not the database.
+
+**Slide 3, second ask** (then run query 2)
+
+> One week paid a third of the others, and took more orders than any of them.
+> So it wasn't a quiet week.
+>
+> Next question: what happened on each individual day?
+
+**Slide 4, third ask** (then run query 3)
+
+> Four days where every single order was refunded in full. That's an outage,
+> not a billing error.
+>
+> Last question, and it's the one an auditor asks: were those real customer
+> orders, or someone tidying up a ledger?
+
+**Close, what it's told us**
+
+> The payout was right. Four days of their own cancellations, refunded to
+> customers in full, proven down to the individual dish.
+>
+> We answered it from the backup. Nothing was restored, and no second copy of
+> 249 other restaurants' financial records ever existed.
+
+---
+
 ## Suggested slides
 
 | # | Slide | Content |
