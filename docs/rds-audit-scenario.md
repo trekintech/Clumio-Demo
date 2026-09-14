@@ -24,17 +24,22 @@ That data left production months ago.
 
 **Without granular retrieval,** you restore an entire database from an archive
 to answer one question about one restaurant and one month. It is slow, it
-costs, and you now hold a second live copy of other restaurants' financial
+costs, and you now hold a second live copy of 249 other restaurants' financial
 records while you rummage through it.
 
 **With it,** you query the archived backup where it sits, pull the rows that
 answer the question, and export them as CSV for finance.
 
 **The answer,** which the query produces: the week beginning 10 February 2025
-paid out £168.40 against roughly £320 in the weeks either side. Not an
-underpayment. Ten orders were duplicate-charged that week and refunded in
-full, £184.70 in total. The payout was correct and the query proves it,
-itemised, in a file you can send back.
+paid out £267.37, against £984.76 and £791.15 in the weeks either side. Not an
+underpayment. Alma Kitchen lost refrigeration on the Wednesday and did not
+trade again until the Sunday. Nobody marked the storefront closed, so orders
+kept arriving and were cancelled on receipt: 25 orders, £935.26, refunded in
+full.
+
+The detail that makes it land is the order count. That week took 39 orders,
+more than the 35 and 37 either side. On volume it was a normal week. They took
+the orders and could not fulfil a single one from the Wednesday on.
 
 That is a better ending than "we recovered the data". The business got an
 answer, not a restore.
@@ -44,8 +49,12 @@ answer, not a restore.
 An RDS **PostgreSQL** instance you can reach from pgAdmin or psql. If you
 already have one, use it: everything goes into its own `kerbside_finance`
 schema, so it cannot collide with anything else on the instance and drops
-cleanly afterwards. Three tables and around 800 rows; nothing here needs
-capacity.
+cleanly afterwards.
+
+Six tables and about 2.9 million rows, which is a few hundred MB. Nothing here
+needs a large instance, but it is not a toy dataset either, and that is
+deliberate: "restore the whole database to answer one question" only sounds
+absurd if the database is worth not restoring.
 
 If you are standing one up specifically for this, keep it small and delete it
 afterwards:
@@ -68,6 +77,29 @@ aws rds create-db-instance \
 than in your shell history or this repo. `--publicly-accessible` is only so you
 can reach it from your laptop: lock the security group to your own IP on 5432,
 not to the world, even in a sandbox.
+
+## What gets created
+
+| Table | Rows | What it holds |
+|---|---|---|
+| `tenants` | 250 | The restaurants. The eight named ones share their slugs with the storefront. |
+| `contracts` | 250 | Negotiated commission rate per restaurant, in basis points. |
+| `dishes` | 60 | Four dishes per cuisine, priced. |
+| `orders` | 897,260 | One row per order: basket, delivery fee, tip, VAT, payment method, refund. |
+| `order_items` | 2,005,124 | The lines behind each order. |
+| `settlements` | 23,000 | One weekly payout per restaurant, derived from the orders. |
+
+Settlements are computed from the orders and the contract rate rather than
+written independently, so gross, refunds, commission and net always agree with
+the transactions behind them. Six checks at the end of the load prove it.
+
+Commission is **18% for Alma Kitchen**, and 14% to 26% elsewhere. Net is
+`gross - refunds - commission`, which is why a settlement row never reads as
+gross minus refunds on its own.
+
+VAT is recorded per order for audit and does not enter the settlement: the
+restaurant accounts for its own VAT, and the platform pays gross less
+commission.
 
 ---
 
@@ -113,50 +145,52 @@ The folder icon in the Query Tool toolbar opens a file. Point it at
 and pasting the contents in works just as well, and avoids pgAdmin's file
 dialog.
 
-**F5** runs it. It creates the schema and generates Q1 2025: 810 orders across
-three restaurants, and the 42 weekly settlements derived from them. It drops
-and recreates `kerbside_finance` at the top, so re-running it is safe and
-nothing else in the database is affected.
+**F5** runs it. Expect a couple of minutes: it is writing about 2.9 million
+rows. It drops and recreates `kerbside_finance` at the top, so re-running it is
+safe and nothing else in the database is affected.
+
+For a faster loop while you are rehearsing, edit the knobs near the top of the
+file:
+
+```sql
+INSERT INTO gen_params VALUES (250, DATE '2025-01-01', DATE '2026-09-30');
+```
+
+Drop the tenant count to 25 and it loads in seconds. Alma Kitchen's figures do
+not change when you do: every restaurant owns its own block of order IDs, so
+the estate size does not disturb the numbers this demo quotes.
 
 Two pgAdmin behaviours will make this look like it failed when it hasn't:
 
-- **Data Output only shows the last result set.** The script ends with several
-  SELECTs and you will only see the final one.
+- **Data Output only shows the last result set.** The file ends with the
+  reconciliation checks, so those are what you will see. That is the useful
+  one, but it means nothing else in the script appears.
 - **`search_path` is per-session.** Each file sets it at the top, so running
   whole files is fine. Run a query fragment on its own without that line and
   you get `relation "orders" does not exist`.
 
 ## Step 4. Check the load
 
-Open a new Query Tool tab and run this. It is the whole verification in one
-result set, so pgAdmin will actually show it:
+The checks run automatically as the last statement of step 3. All six must
+read zero:
 
-```sql
-SET search_path TO kerbside_finance;
-
-SELECT 'orders loaded'           AS check_name, COUNT(*)::text AS result FROM orders
-UNION ALL
-SELECT 'settlements loaded',     COUNT(*)::text FROM settlements
-UNION ALL
-SELECT 'reconciliation failures', COUNT(*)::text FROM settlements
-  WHERE net_paid_pence <> gross_pence - refunds_pence - commission_pence;
-```
-
-Expected:
-
-| check_name | result |
+| check_name | failures |
 |---|---|
-| orders loaded | 810 |
-| settlements loaded | 42 |
-| reconciliation failures | 0 |
+| settlement internal maths | 0 |
+| settlement totals vs orders | 0 |
+| order header vs its lines | 0 |
+| gross vs its components | 0 |
+| refund larger than the order | 0 |
+| commission rate vs contract | 0 |
 
-Then the figure the whole demo turns on. This is the auditor's question, run
+Then the figures the whole demo turns on. This is the auditor's question, run
 against production while the data is still there:
 
 ```sql
 SET search_path TO kerbside_finance;
 
 SELECT period_start                          AS week_beginning,
+       order_count                           AS orders,
        ROUND(gross_pence      / 100.0, 2)    AS gross_gbp,
        ROUND(refunds_pence    / 100.0, 2)    AS refunds_gbp,
        ROUND(commission_pence / 100.0, 2)    AS commission_gbp,
@@ -169,22 +203,21 @@ ORDER BY period_start;
 
 Expected, exactly:
 
-| week_beginning | gross_gbp | refunds_gbp | commission_gbp | net_paid_gbp |
-|---|---|---|---|---|
-| 2025-02-03 | 384.56 | 0.00 | 69.22 | 315.34 |
-| 2025-02-10 | 390.07 | 184.70 | 36.97 | **168.40** |
-| 2025-02-17 | 395.58 | 5.44 | 70.23 | 319.91 |
-| 2025-02-24 | 401.09 | 0.00 | 72.20 | 328.89 |
+| week_beginning | orders | gross_gbp | refunds_gbp | commission_gbp | net_paid_gbp |
+|---|---|---|---|---|---|
+| 2025-02-03 | 35 | 1218.73 | 17.80 | 216.17 | 984.76 |
+| 2025-02-10 | 39 | 1312.72 | 986.66 | 58.69 | **267.37** |
+| 2025-02-17 | 37 | 964.82 | 0.00 | 173.67 | 791.15 |
+| 2025-02-24 | 38 | 1174.47 | 47.95 | 202.77 | 923.75 |
 
-Always show the commission column. Net is
-`gross - refunds - commission`, and Kerbside takes 18% of what is left after
-refunds, so 390.07 - 184.70 = 205.37, less 36.97 commission, pays 168.40. Drop
-the commission column and the row looks like it does not add up, which is the
-last thing you want an auditor's arithmetic to do on camera.
+Always show the commission column. Net is `gross - refunds - commission`, so
+1312.72 - 986.66 = 326.06, less 58.69 commission, pays 267.37. Drop the
+commission column and the row looks like it does not add up, which is the last
+thing you want an auditor's arithmetic to do on camera.
 
-If 10 February reads £168.40 against roughly £320 either side, the data is
-right and everything downstream will work. If it doesn't, stop here rather than
-taking a backup of the wrong numbers.
+If 10 February reads £267.37 with 39 orders, the data is right and everything
+downstream will work. If it doesn't, stop here rather than taking a backup of
+the wrong numbers.
 
 ## Step 5. Back up
 
@@ -196,102 +229,66 @@ only if the backup exists first.
 
 ## Step 6. Purge
 
-Back in pgAdmin. Open `sql/02-retention-purge.sql` and run it, or paste this,
-which is the same thing:
+Back in pgAdmin. Open `sql/02-retention-purge.sql` and run it. It deletes
+everything before August 2025 under the 13-month retention rule:
 
-```sql
-SET search_path TO kerbside_finance;
+| | rows |
+|---|---|
+| orders purged | 294,768 |
+| order lines purged | 659,524 |
+| settlements purged | 7,750 |
+| orders still live | 602,492 |
+| settlements still live | 15,250 |
 
-SELECT 'rows about to be purged' AS note,
-       (SELECT COUNT(*) FROM orders      WHERE placed_at    < DATE '2025-08-01') AS orders_to_purge,
-       (SELECT COUNT(*) FROM settlements WHERE period_start < DATE '2025-08-01') AS settlements_to_purge;
+Note the last two. This reads as a retention boundary rather than a wiped
+database: the 13 months retention is meant to keep are all still there. If
+someone asks whether you just truncated the table, the answer is on screen.
 
-DELETE FROM settlements WHERE period_start < DATE '2025-08-01';
-DELETE FROM orders      WHERE placed_at    < DATE '2025-08-01';
-```
-
-810 orders and 42 settlements go. Everything generated is Q1 2025, which is
-older than the 13-month cutoff, so the tables end up empty.
-
-Then the shot. Run the auditor's question again, against production, now that
-retention has taken the answer away:
-
-```sql
-SET search_path TO kerbside_finance;
-
-SELECT period_start                          AS week_beginning,
-       ROUND(gross_pence      / 100.0, 2)    AS gross_gbp,
-       ROUND(refunds_pence    / 100.0, 2)    AS refunds_gbp,
-       ROUND(commission_pence / 100.0, 2)    AS commission_gbp,
-       ROUND(net_paid_pence   / 100.0, 2)    AS net_paid_gbp
-FROM settlements
-WHERE tenant_slug = 'alma-kitchen'
-  AND period_start BETWEEN DATE '2025-02-01' AND DATE '2025-02-28'
-ORDER BY period_start;
-```
-
-No rows. This is worth filming. It is the difference between telling the
-audience the data is gone and showing them: the query is correct, the database
-simply no longer holds the answer.
+The file finishes by running the auditor's question against production now that
+retention has taken the answer away. **No rows.** That is the shot: the query is
+correct, the database simply no longer holds the answer.
 
 ## Step 7. Query the archive
 
 This does not run in pgAdmin. It goes in the **Clumio query editor**, against
-the backup taken in step 5. The full file is `sql/03-audit-query.sql`.
+the backup taken in step 5. The full file is `sql/03-audit-query.sql`, which
+holds five queries.
 
-**Query 1 — the payouts in dispute.** The one that answers the accountant:
+**Query 1 — the payouts in dispute.** The same four rows as step 4, plus the
+commission rate and payout reference. This is the one that answers the
+accountant.
 
-```sql
-SET search_path TO kerbside_finance;
+**Query 2 — the refunds itemised.** 27 rows: the 25 cancellations plus two
+ordinary item-unavailable refunds that happened to fall in the same week. Order
+IDs, timestamps, channel, payment method, amount charged and amount refunded.
+This is the CSV you export.
 
-SELECT
-  s.period_start                       AS week_beginning,
-  s.period_end                         AS week_ending,
-  ROUND(s.gross_pence      / 100.0, 2) AS gross_gbp,
-  ROUND(s.refunds_pence    / 100.0, 2) AS refunds_gbp,
-  ROUND(s.commission_pence / 100.0, 2) AS commission_gbp,
-  ROUND(s.net_paid_pence   / 100.0, 2) AS net_paid_gbp,
-  (
-    SELECT COUNT(*)
-    FROM orders o
-    WHERE o.tenant_slug = s.tenant_slug
-      AND o.placed_at::date BETWEEN s.period_start AND s.period_end
-      AND o.refund_pence > 0
-  )                                    AS refunded_orders
-FROM settlements s
-WHERE s.tenant_slug = 'alma-kitchen'
-  AND s.period_start BETWEEN DATE '2025-02-01' AND DATE '2025-02-28'
-ORDER BY s.period_start;
-```
+**Query 3 — the same thing by day.** This is the one that reads on screen:
 
-The same four rows as step 4, plus the refunded-order count that explains them:
-0, **10**, 1, 0.
+| day | weekday | orders | refunded | charged_gbp | refunded_gbp |
+|---|---|---|---|---|---|
+| 2025-02-10 | Mon | 3 | 0 | 94.53 | 0.00 |
+| 2025-02-11 | Tue | 5 | 1 | 108.18 | 12.85 |
+| 2025-02-12 | Wed | 4 | 4 | 189.83 | 189.83 |
+| 2025-02-13 | Thu | 6 | 6 | 202.32 | 202.32 |
+| 2025-02-14 | Fri | 6 | 6 | 258.32 | 258.32 |
+| 2025-02-15 | Sat | 9 | 9 | 284.79 | 284.79 |
+| 2025-02-16 | Sun | 6 | 1 | 174.75 | 38.55 |
 
-**Query 2 — the evidence.** The ten duplicate charges, itemised. This is the
-one you export as CSV:
+Four consecutive days where charged and refunded are the same number, including
+the Friday and Saturday that carry the week. Nobody needs the story explained
+after seeing that.
 
-```sql
-SET search_path TO kerbside_finance;
+**Query 4 — the baskets behind the three largest cancelled orders.** Dish,
+quantity, unit price. The answer to "how do we know these refunds were real
+orders and not an adjustment someone posted".
 
-SELECT
-  o.order_id,
-  o.placed_at,
-  ROUND(o.gross_pence  / 100.0, 2) AS charged_gbp,
-  ROUND(o.refund_pence / 100.0, 2) AS refunded_gbp,
-  o.refund_reason
-FROM orders o
-WHERE o.tenant_slug = 'alma-kitchen'
-  AND o.placed_at::date BETWEEN DATE '2025-02-10' AND DATE '2025-02-16'
-  AND o.refund_pence > 0
-ORDER BY o.placed_at;
-```
+**Query 5 — the one-line answer**, for when it gets asked a third time:
 
-Ten rows, order IDs 400364 to 400418, charged and refunded identical on every
-one, all of them `duplicate-charge`. They total £184.70.
-
-There is a third query in the file that collapses that to a single line
-(`duplicate-charge | 10 | 184.70`) for when the question gets asked again from
-the floor.
+| refund_reason | refunded_orders | total_refunded_gbp |
+|---|---|---|
+| restaurant-cancelled | 25 | 935.26 |
+| item-unavailable | 2 | 51.40 |
 
 ---
 
@@ -303,10 +300,11 @@ Prepare the backup ahead of the session rather than on camera.
 |---|---|---|
 | R1 | pgAdmin, against production | Run the auditor's question. No rows. |
 | R2 | Clumio console | The archived backup |
-| R3 | Clumio query editor | Paste query 1 from `sql/03-audit-query.sql` |
+| R3 | Clumio query editor | Query 1: the four February payouts |
 | R4 | Results | The 10 February row against the weeks either side |
-| R5 | Clumio query editor | Query 2: the ten duplicate charges, itemised |
-| R6 | Export | Download as CSV, open it |
+| R5 | Clumio query editor | Query 3: the same week by day |
+| R6 | Clumio query editor | Query 2: the refunds itemised |
+| R7 | Export | Download as CSV, open it |
 
 **Narration**
 
@@ -314,10 +312,16 @@ Prepare the backup ahead of the session rather than on camera.
   retention took that out months ago. There is nothing to query."
 - R2: "The archive has it."
 - R3: "I am not restoring anything. I am running SQL against the backup."
-- R4: "That week paid out about half of the weeks either side."
-- R5: "Ten duplicate charges, refunded in full. The payout was right."
-- R6: "That CSV goes back to their accountant. No restore, no second copy of
-  everyone else's financial data sitting around while we looked."
+- R4: "Two hundred and sixty-seven pounds, against nine hundred and eighty-four
+  the week before. And look at the order count — thirty-nine. It was their
+  busiest week of the month."
+- R5: "There it is. Wednesday to Saturday, every order refunded in full. They
+  lost refrigeration and nobody took the storefront offline, so orders kept
+  coming in and kept getting cancelled."
+- R6: "Twenty-five orders, nine hundred and thirty-five pounds."
+- R7: "That CSV goes back to their accountant. No restore, no second copy of
+  two hundred and forty-nine other restaurants' financial data sitting around
+  while we looked."
 
 **Traps**
 
@@ -358,8 +362,12 @@ It targets PostgreSQL and lives in a `kerbside_finance` schema, so it will not
 disturb anything already on the instance and `DROP SCHEMA kerbside_finance
 CASCADE` removes every trace of it.
 
-The generation logic and every figure quoted above were run and checked before
-being written down, including a week-boundary bug that put Monday's orders in
-the previous week's settlement. The Postgres syntax itself has not been
-executed against a live engine, so treat the first run as the real test: the
-counts in step 4 report immediately if anything is off.
+All three files were run end to end against PostgreSQL 18 and every figure on
+this page came out of that run: the load, the six checks, the five audit
+queries and the purge. That was PGlite rather than RDS, so the engine is real
+but the instance is not. The checks at the end of the load are still the thing
+to watch on the first run against your own instance.
+
+Generation is deterministic. The data comes from an MD5-based hash of each key
+rather than `random()`, so the same script produces the same ledger every time,
+on any engine, and the figures quoted here stay true.
