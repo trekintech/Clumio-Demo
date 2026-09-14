@@ -34,6 +34,18 @@
 --   * The engine is not Postgres. An unaliased column comes back as _col0,
 --     which is the Presto/Trino convention, so this file sticks to plain ANSI:
 --     CAST rather than ::, no to_char, no FILTER, no alias called "day".
+--   * Dates and timestamps arrive as STRINGS, and there is no implicit
+--     coercion. Tested in the console:
+--
+--       period_start BETWEEN DATE '...' AND DATE '...'              ERRORS
+--       period_start BETWEEN '2025-02-01' AND '2025-02-28'          works
+--       CAST(period_start AS DATE) BETWEEN DATE '...' AND DATE '...' works
+--       CAST(placed_at AS DATE) = DATE '2025-02-15'                 works
+--       SUBSTR(placed_at, 1, 10) = '2025-02-15'                     works
+--
+--     So: cast the column, or compare strings to strings. Never put a bare
+--     column next to a DATE literal - that is the one combination that
+--     errors, and it is easy to reintroduce.
 --
 -- Because the names are tied to a backup, write these queries AFTER taking the
 -- backup you will actually demo from, and save the filled-in version. Taking
@@ -61,7 +73,7 @@ SELECT
   s.payout_ref
 FROM SETTLEMENTS_TABLE s
 WHERE s.tenant_slug = 'alma-kitchen'
-  AND s.period_start BETWEEN DATE '2025-02-01' AND DATE '2025-02-28'
+  AND CAST(s.period_start AS DATE) BETWEEN DATE '2025-02-01' AND DATE '2025-02-28'
 ORDER BY s.period_start;
 
 

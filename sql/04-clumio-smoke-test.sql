@@ -69,13 +69,15 @@ WHERE tenant_slug = 'alma-kitchen';
 -- 03-audit-query.sql gets written, so note which ones error.
 -- ===========================================================================
 
--- 5a. Plain string comparison. Works if period_start is a string, because
---     ISO-8601 dates sort correctly as text. Expect 4.
+-- 5a. Plain string comparison, ISO-8601 sorting correctly as text.
+--     CONFIRMED WORKING. Expect 4.
 SELECT COUNT(*) FROM SETTLEMENTS_TABLE
 WHERE tenant_slug = 'alma-kitchen'
   AND period_start BETWEEN '2025-02-01' AND '2025-02-28';
 
--- 5b. DATE literals. Works if the column really is a date type. Expect 4.
+-- 5b. DATE literals against a bare column. CONFIRMED TO ERROR - dates arrive
+--     as strings and there is no implicit coercion. Kept as the regression
+--     case: if this ever starts working, the engine changed.
 SELECT COUNT(*) FROM SETTLEMENTS_TABLE
 WHERE tenant_slug = 'alma-kitchen'
   AND period_start BETWEEN DATE '2025-02-01' AND DATE '2025-02-28';
@@ -87,13 +89,14 @@ WHERE tenant_slug = 'alma-kitchen'
 
 
 -- 6a. Same three for a timestamp column, which is the harder case. Taking the
---     first 10 characters sidesteps the format entirely. Expect 9.
+--     first 10 characters sidesteps the format entirely. CONFIRMED WORKING.
+--     Expect 9.
 SELECT COUNT(*) FROM ORDERS_TABLE
 WHERE tenant_slug = 'alma-kitchen'
   AND SUBSTR(placed_at, 1, 10) = '2025-02-15';
 
--- 6b. Expect 9. Likely to fail if placed_at is a string holding a full
---     timestamp, since Trino will not cast that to DATE.
+-- 6b. Expect 9. CONFIRMED WORKING, which was not obvious: placed_at holds a
+--     full timestamp as text and the cast still copes.
 SELECT COUNT(*) FROM ORDERS_TABLE
 WHERE tenant_slug = 'alma-kitchen'
   AND CAST(placed_at AS DATE) = DATE '2025-02-15';
@@ -113,7 +116,9 @@ SELECT ROUND(net_paid_pence / 100.0, 2) AS net_gbp
 FROM SETTLEMENTS_TABLE
 WHERE payout_ref = 'KB-2025W07-218DF9';
 
--- 8. Conditional aggregate, which is what replaced FILTER. Expect 9.
+-- 8. Conditional aggregate, which is what replaced FILTER. STILL UNTESTED -
+--    this one was not in the batch that was run in the console. Audit query 3,
+--    the by-day shot, depends on it. Expect 9.
 SELECT SUM(CASE WHEN refund_pence > 0 THEN 1 ELSE 0 END) AS refunded
 FROM ORDERS_TABLE
 WHERE tenant_slug = 'alma-kitchen'

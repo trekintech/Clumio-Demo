@@ -316,14 +316,31 @@ filled-in queries. Taking the backup again invalidates every name in them.
 
 ### The engine is not Postgres
 
-An unaliased column comes back as `_col0`, which is the Presto/Trino
-convention. So the file sticks to plain ANSI: `CAST(x AS DATE)` rather than
-`x::date`, no `to_char`, no `FILTER`, and no column aliased `day` because that
-is a function name there. If you write your own query against this data, stay
-inside that subset.
+An unaliased column comes back as `_col0`, the schema browser reports
+Hive/Trino types, and **dates and timestamps arrive as strings**. There is no
+implicit coercion between the two. Tested in the console against this dataset:
 
-Also: **SELECT statements only**, so there is no `SET` and no `search_path`,
-and **paste one query at a time** rather than the whole file.
+| Pattern | Result |
+|---|---|
+| `period_start BETWEEN DATE '2025-02-01' AND DATE '2025-02-28'` | **errors** |
+| `period_start BETWEEN '2025-02-01' AND '2025-02-28'` | works |
+| `CAST(period_start AS DATE) BETWEEN DATE '…' AND DATE '…'` | works |
+| `CAST(placed_at AS DATE) = DATE '2025-02-15'` | works |
+| `SUBSTR(placed_at, 1, 10) = '2025-02-15'` | works |
+
+Cast the column, or compare strings to strings. A bare column next to a `DATE`
+literal is the one combination that fails, and it is easy to reintroduce
+without noticing because it is what you would write against Postgres.
+
+`CAST(placed_at AS DATE)` working is worth knowing: that column holds a full
+timestamp as text (`2025-01-05 13:51:00`), and the cast copes with it. Plain
+Trino would not, so the engine is more forgiving than its error messages
+suggest.
+
+The rest of what the audit queries use is confirmed working: `ROUND(x / 100.0,
+2)`, `COUNT(*)`, `GROUP BY`, `ORDER BY` on a column ordinal, and a two-table
+`JOIN`. Also: **SELECT statements only**, so no `SET` and no `search_path`, and
+**paste one query at a time**.
 
 ### If it returns nothing
 
