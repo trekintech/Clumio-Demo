@@ -40,20 +40,40 @@ to the second, in place.
 
 > A bad pricing deploy corrupted three restaurants out of 4,127. Order totals
 > now read £0.00, modifiers are stripped, and every invoice and payout
-> calculated from those three partitions is wrong. Native recovery means
-> restoring the whole table: rewinding 310,000 orders to fix 427.
+> calculated from those three partitions is wrong. DynamoDB can't restore a
+> partition and can't restore in place, so the native fix is to restore all
+> 4,127 to a second table and hand-write a merge for the three you wanted.
 
 The platform is still up and still taking orders, so this isn't lost trade.
-It's that the money is wrong and nobody can tell which figures to trust. The
-collateral of the only native fix is the line worth saying out loud: to repair
-0.14% of the data you discard everything the other 4,124 restaurants did since
-the restore point.
+It's that the money is wrong and nobody can tell which figures to trust.
 
 | | |
 |---|---|
 | Restaurants affected | 3 of 4,127 |
 | Orders corrupted | ~427 of 310,125, so 0.14% |
 | Corruption | 95% of orders per partition, tagged `pricing-svc@4.11.2` |
+
+**What the native route actually costs.** Be precise about this, because
+someone will ask and the honest answer is better than the dramatic one:
+
+1. `RestoreTableToPointInTime` always creates a **new** table. Nothing rolls
+   the live table backwards, so nobody loses 310,000 orders.
+2. You can't restore a subset. No partition-key filter, no prefix. All 4,127
+   restaurants come back whether you want them or not, and you're now holding
+   a second complete copy of the estate.
+3. You hand-write a script to pull the three partitions out of the restored
+   table and write them over the live one.
+4. **That merge is where data loss lives.** Anything legitimately written to
+   those three partitions between the restore point and the merge gets
+   clobbered by a naive overwrite, so the script has to reconcile rather than
+   copy: compare timestamps, keep post-incident writes, replace only what the
+   deploy touched. Bespoke code, written under pressure, against live financial
+   data.
+5. The corruption stays live throughout, and keeps being billed from.
+
+Backtrack does step 1 to 4 as one operation, scoped to the partition keys, to
+the second, in place. That's the comparison, and it holds up without
+overstating what PITR does.
 
 | Seg | Capture | Doing | Hold for |
 |---|---|---|---|
@@ -86,8 +106,11 @@ the restore point.
 **Traps**
 
 - Don't say the table was restored. It wasn't. Three partitions were.
-- The PITR comparison is worth making, but be precise: native PITR can't do
+- The PITR comparison is worth making, but be precise. Native PITR can't do
   partition-level or in-place recovery, and a PITR backup dies with its table.
+  Don't say the table gets rewound or that the other restaurants lose data:
+  a restore goes to a new table, so what it actually costs is a second full
+  copy plus a hand-written merge. See the commercial framing above.
 
 **Files on screen:** `incident.json` gives you `recoverToBefore` and
 `partitionKeys`. Have it open in 1E.
