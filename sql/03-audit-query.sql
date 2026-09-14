@@ -65,7 +65,7 @@
 -- ---------------------------------------------------------------------------
 
 
--- 1. The payouts in dispute.
+-- 1. The payouts in dispute.   [RECORDED - segment R3]
 --
 -- Read the order count alongside the payout. The week beginning 10 February
 -- took a normal number of orders and paid out about a third of the weeks
@@ -86,7 +86,7 @@ WHERE s.tenant_slug = 'alma-kitchen'
 ORDER BY s.period_start;
 
 
--- 2. Why that week was short: the refunds behind it, itemised.
+-- 2. The refunds itemised.   [NOT recorded - keep ready for questions]
 --
 -- This is the evidence that goes back to the accountant. Export it as CSV.
 -- Four consecutive days of cancellations, every order refunded in full.
@@ -105,7 +105,7 @@ WHERE o.tenant_slug = 'alma-kitchen'
 ORDER BY o.placed_at;
 
 
--- 3. The same week by day, which is the shape that reads on screen.
+-- 3. The same week by day.   [RECORDED - segment R4. The shot that carries it]
 -- Trading stops dead on the 12th and does not resume until the 16th.
 SELECT
   SUBSTR(o.placed_at, 1, 10)                          AS order_day,
@@ -120,7 +120,8 @@ GROUP BY SUBSTR(o.placed_at, 1, 10)
 ORDER BY 1;
 
 
--- 4. These were real baskets, not adjustments. The lines behind the largest
+-- 4. The baskets behind the cancellations.   [RECORDED - segment R5]
+-- These were real orders, not adjustments. The lines behind the largest
 -- cancelled orders, joined into two million order lines.
 --
 -- This is the query that proves the capability rather than describing it.
@@ -141,7 +142,7 @@ WHERE o.tenant_slug = 'alma-kitchen'
 ORDER BY o.gross_pence DESC, o.order_id, oi.order_item_id;
 
 
--- 5. The one-line answer, for when it gets asked a third time.
+-- 5. The one-line answer.   [NOT recorded - for when it is asked from the floor]
 SELECT
   o.refund_reason,
   COUNT(*)                              AS refunded_orders,

@@ -173,10 +173,18 @@ so it's the one that survives being told rather than shown.
 Recorded separately, against your own PostgreSQL RDS instance. Load the data
 and take the Clumio backup before the session rather than on camera.
 
-Full step-by-step, shot list, narration and SQL are in
-[rds-audit-scenario.md](rds-audit-scenario.md). It is an audit and compliance
-story, not recovery speed. Don't sell it as fast, and never imply Instant
-Access applies to it — that is Standard tier and a different capability.
+Six segments, three of them queries: what was paid, why it was short, and
+proof the evidence is real. Each query runs because the one before left a
+question open, so the order is not negotiable.
+
+Full step-by-step, shot list and SQL are in
+[rds-audit-scenario.md](rds-audit-scenario.md). The story in prose, and the
+figures written out for slides, are in
+[rds-slide-brief.md](rds-slide-brief.md).
+
+It is an audit and compliance story rather than a recovery-speed one, which is
+a feature of the set: three different shapes of problem reads stronger than
+three claims of speed.
 
 ---
 

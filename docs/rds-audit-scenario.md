@@ -424,6 +424,11 @@ someone posted".
 
 Prepare the backup ahead of the session rather than on camera.
 
+The full narrative — the story in prose, what each query proves, and the
+figures written out for slides — is in
+[rds-slide-brief.md](rds-slide-brief.md). This section is the shot list. That
+one is what you hand to someone building the deck.
+
 The whole segment is text in grids. It has no dashboard going red and no
 four-second poll bringing it back, so it cannot be carried the way clips 1 and
 2 are. What it has instead is an escalation across **three queries**: what was
@@ -432,6 +437,21 @@ and it builds. Shoot it as "here is a query tool" and it dies.
 
 Three queries is the whole point. One is not enough to show it is a real
 engine, and five is a man reading SQL aloud.
+
+**Why each one follows the last.** Do not present these as three things the
+product can do. Each exists because the one before it left a question open:
+
+| Query | Runs because | Leaves open |
+|---|---|---|
+| 1. The payouts | It is the accountant's question, unchanged — the same SQL that just returned nothing against production | £986.66 of refunds is a number, not an explanation. When did it happen, and whose fault was it? |
+| 2. By day | Finance cannot reply to an accountant with a total. They need the shape: spread across the week, or concentrated? | Refund rows are just rows. Anyone can post one. Were these real orders? |
+| 3. The baskets | To answer exactly that, by going down to what was in them | Nothing. This is the end. |
+
+The pivot in query 1 is the **order count**, not the payout. £267.37 against
+£900 only says something is odd. Thirty-nine orders — more than either
+neighbouring week — kills the obvious explanations: they did not trade badly,
+and they were not closed in any way the platform recorded. That is what makes
+query 2 necessary rather than merely interesting.
 
 | Seg | Capture | Doing | Rows |
 |---|---|---|---|
@@ -480,11 +500,13 @@ remembers, and R5's argument can be made in a sentence over the top of R4.
 **Traps**
 
 - Do not sell this as recovery speed. It is an audit answer, not an outage fix,
-  and that is the stronger story.
-- Instant Access does not apply here. That is Standard tier and a different
-  capability; this is Archive.
-- Do not call this Backtrack. Backtrack is the rollback capability used in the
-  DynamoDB and S3 clips.
+  and that is the stronger story. No duration figures.
+- If Instant Access comes up from the floor, it is Standard tier and this is
+  Archive — different capability, different shape. Worth a straight answer
+  rather than a deflection, since the person asking has usually spotted that
+  the two segments work differently and wants to know why.
+- Keep query 1 brisk. It is a number that looks wrong, nothing more, and
+  lingering on it spends the attention query 2 needs.
 
 ## Afterwards
 

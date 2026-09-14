@@ -494,3 +494,5 @@ alone is usually cheaper than tearing down and re-seeding.
 - The RDS scenario lives in [docs/rds-audit-scenario.md](docs/rds-audit-scenario.md)
   with its SQL in `sql/`. It needs a PostgreSQL RDS instance you provision
   yourself, and is prepared and recorded separately from the other three clips.
+  [docs/rds-slide-brief.md](docs/rds-slide-brief.md) is the same story written
+  for whoever is building the deck.
