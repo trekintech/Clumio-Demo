@@ -101,6 +101,36 @@ VAT is recorded per order for audit and does not enter the settlement: the
 restaurant accounts for its own VAT, and the platform pays gross less
 commission.
 
+## Sizing
+
+The default is 250 restaurants, which comes to **378 MB** of tables and
+indexes. Against the 20 GB the `create-db-instance` command above allocates,
+that is under 2%. Storage is not what this costs you: an idle instance billed
+by the hour dwarfs a few hundred MB of gp3, so the thing to watch is deleting
+the instance afterwards, not the row count.
+
+Three sizes, all measured:
+
+| `tenant_count` | orders | order lines | schema size |
+|---|---|---|---|
+| 250 (default) | 897,260 | 2,005,124 | 378 MB |
+| 100 | 345,494 | 771,813 | 145 MB |
+| 25 | 80,808 | 180,470 | 34 MB |
+
+**Alma Kitchen's figures are identical at all three.** Every restaurant owns
+its own block of order IDs, so the estate size does not move a single number
+this document quotes. Verified, not assumed.
+
+Pick the size before step 5. Changing the data after the backup means taking
+the backup again.
+
+250 is the recommendation. The whole argument is that restoring the database to
+answer one question is absurd, and that reads better at 900,000 orders than at
+80,000. The one thing worth a look on your first run is how long query 2 and
+query 3 take in the Clumio query editor against the archive — that is the only
+part of this nobody can measure in advance. If it drags, reload at 100 and take
+the backup again; the narration does not change.
+
 ---
 
 # Running it
