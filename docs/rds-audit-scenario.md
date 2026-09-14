@@ -463,6 +463,12 @@ than showing it.
 
 Cancelled orders over £50, joined into the 2 million order lines. 19 rows.
 
+This is the only query with two tables in it, so mind which token goes where.
+**`ORDERS_TABLE` is aliased `o`, `ORDER_ITEMS_TABLE` is `oi`.** Put them the
+wrong way round and every filter in the WHERE clause is pointed at the wrong
+table, and you get nothing back rather than an error. The table names look
+similar enough at that length that it is easy to do.
+
 ```sql
 SELECT
   o.order_id,

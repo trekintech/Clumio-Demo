@@ -110,6 +110,10 @@ ORDER BY 1;
 -- These were real orders, not adjustments. The lines behind the largest
 -- cancelled orders, joined into two million order lines.
 --
+-- The only query here with two tables. ORDERS_TABLE is o, ORDER_ITEMS_TABLE
+-- is oi. Swap them and every WHERE filter points at the wrong table, which
+-- returns nothing rather than erroring.
+--
 -- This is the query that proves the capability rather than describing it.
 SELECT
   o.order_id,
