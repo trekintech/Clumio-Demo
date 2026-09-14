@@ -4,6 +4,10 @@
 -- 03-audit-query.sql, and certainly before recording anything. Each one
 -- isolates a single thing the audit queries depend on.
 --
+-- All of these have been run against the live console once, against the
+-- dataset 01-schema-and-data.sql generates. Exactly one failed: 5b. Re-run
+-- them after any change to the data or a Clumio upgrade, not before.
+--
 -- Why this file exists: that editor is not Postgres. An unaliased column comes
 -- back as _col0 and the schema browser reports Hive/Trino types - bigint, int,
 -- string - so date and timestamp columns arrive as STRINGS. Anything written
@@ -116,9 +120,9 @@ SELECT ROUND(net_paid_pence / 100.0, 2) AS net_gbp
 FROM SETTLEMENTS_TABLE
 WHERE payout_ref = 'KB-2025W07-218DF9';
 
--- 8. Conditional aggregate, which is what replaced FILTER. STILL UNTESTED -
---    this one was not in the batch that was run in the console. Audit query 3,
---    the by-day shot, depends on it. Expect 9.
+-- 8. Conditional aggregate, which is what replaced FILTER. CONFIRMED WORKING,
+--    together with GROUP BY SUBSTR(...) and ORDER BY on an ordinal: the full
+--    by-day query returned all seven rows matching Postgres exactly. Expect 9.
 SELECT SUM(CASE WHEN refund_pence > 0 THEN 1 ELSE 0 END) AS refunded
 FROM ORDERS_TABLE
 WHERE tenant_slug = 'alma-kitchen'

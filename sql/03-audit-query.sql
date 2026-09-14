@@ -47,6 +47,15 @@
 --     column next to a DATE literal - that is the one combination that
 --     errors, and it is easy to reintroduce.
 --
+--     This file uses SUBSTR for placed_at and CAST for period_start, which
+--     are the two forms actually run in the console. SUBSTR is also immune to
+--     the timestamp format, which CAST is not. Note that SUBSTR on placed_at
+--     will NOT run in Postgres, where that column is a real timestamp - these
+--     queries target the Clumio editor and nothing else.
+--
+--     Verified against the live console: every query below returns the row
+--     counts and figures quoted in docs/rds-audit-scenario.md.
+--
 -- Because the names are tied to a backup, write these queries AFTER taking the
 -- backup you will actually demo from, and save the filled-in version. Taking
 -- the backup again invalidates them.
@@ -91,7 +100,7 @@ SELECT
   o.refund_reason
 FROM ORDERS_TABLE o
 WHERE o.tenant_slug = 'alma-kitchen'
-  AND CAST(o.placed_at AS DATE) BETWEEN DATE '2025-02-10' AND DATE '2025-02-16'
+  AND SUBSTR(o.placed_at, 1, 10) BETWEEN '2025-02-10' AND '2025-02-16'
   AND o.refund_pence > 0
 ORDER BY o.placed_at;
 
@@ -99,15 +108,15 @@ ORDER BY o.placed_at;
 -- 3. The same week by day, which is the shape that reads on screen.
 -- Trading stops dead on the 12th and does not resume until the 16th.
 SELECT
-  CAST(o.placed_at AS DATE)                           AS order_day,
+  SUBSTR(o.placed_at, 1, 10)                          AS order_day,
   COUNT(*)                                            AS orders,
   SUM(CASE WHEN o.refund_pence > 0 THEN 1 ELSE 0 END) AS refunded,
   ROUND(SUM(o.gross_pence)  / 100.0, 2)               AS charged_gbp,
   ROUND(SUM(o.refund_pence) / 100.0, 2)               AS refunded_gbp
 FROM ORDERS_TABLE o
 WHERE o.tenant_slug = 'alma-kitchen'
-  AND CAST(o.placed_at AS DATE) BETWEEN DATE '2025-02-10' AND DATE '2025-02-16'
-GROUP BY CAST(o.placed_at AS DATE)
+  AND SUBSTR(o.placed_at, 1, 10) BETWEEN '2025-02-10' AND '2025-02-16'
+GROUP BY SUBSTR(o.placed_at, 1, 10)
 ORDER BY 1;
 
 
@@ -127,7 +136,7 @@ JOIN ORDER_ITEMS_TABLE oi
   ON oi.order_id = o.order_id
 WHERE o.tenant_slug = 'alma-kitchen'
   AND o.refund_reason = 'restaurant-cancelled'
-  AND CAST(o.placed_at AS DATE) BETWEEN DATE '2025-02-10' AND DATE '2025-02-16'
+  AND SUBSTR(o.placed_at, 1, 10) BETWEEN '2025-02-10' AND '2025-02-16'
   AND o.gross_pence >= 5000
 ORDER BY o.gross_pence DESC, o.order_id, oi.order_item_id;
 
@@ -139,7 +148,7 @@ SELECT
   ROUND(SUM(o.refund_pence) / 100.0, 2) AS total_refunded_gbp
 FROM ORDERS_TABLE o
 WHERE o.tenant_slug = 'alma-kitchen'
-  AND CAST(o.placed_at AS DATE) BETWEEN DATE '2025-02-10' AND DATE '2025-02-16'
+  AND SUBSTR(o.placed_at, 1, 10) BETWEEN '2025-02-10' AND '2025-02-16'
   AND o.refund_pence > 0
 GROUP BY o.refund_reason
 ORDER BY 3 DESC;

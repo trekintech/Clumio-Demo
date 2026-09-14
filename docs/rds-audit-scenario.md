@@ -332,6 +332,12 @@ Cast the column, or compare strings to strings. A bare column next to a `DATE`
 literal is the one combination that fails, and it is easy to reintroduce
 without noticing because it is what you would write against Postgres.
 
+`03-audit-query.sql` uses `SUBSTR` for `placed_at` and `CAST` for
+`period_start`, which are the two forms actually run in the console. `SUBSTR`
+is also immune to the timestamp format. It will not run in pgAdmin, where
+`placed_at` is a real timestamp — that file targets the Clumio editor and
+nothing else.
+
 `CAST(placed_at AS DATE)` working is worth knowing: that column holds a full
 timestamp as text (`2025-01-05 13:51:00`), and the cast copes with it. Plain
 Trino would not, so the engine is more forgiving than its error messages
@@ -382,13 +388,16 @@ This is the CSV you export.
 
 | order_day | orders | refunded | charged_gbp | refunded_gbp |
 |---|---|---|---|---|
-| 2025-02-10 | 3 | 0 | 94.53 | 0.00 |
+| 2025-02-10 | 3 | 0 | 94.53 | 0.0 |
 | 2025-02-11 | 5 | 1 | 108.18 | 12.85 |
 | 2025-02-12 | 4 | 4 | 189.83 | 189.83 |
 | 2025-02-13 | 6 | 6 | 202.32 | 202.32 |
 | 2025-02-14 | 6 | 6 | 258.32 | 258.32 |
 | 2025-02-15 | 9 | 9 | 284.79 | 284.79 |
 | 2025-02-16 | 6 | 1 | 174.75 | 38.55 |
+
+That is copied from the console, not from Postgres. The engine trims trailing
+zeros, so a round number shows as `0.0` rather than `0.00`.
 
 There is no weekday column: `to_char` does not exist in that engine. The 12th
 is the Wednesday and the 15th the Saturday, so say it rather than showing it.
