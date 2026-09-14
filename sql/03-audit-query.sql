@@ -6,16 +6,38 @@
 -- were short. Prove what was paid, and why.
 --
 -- ---------------------------------------------------------------------------
--- Written for the Clumio editor, which is stricter than pgAdmin:
+-- BEFORE YOU RUN THIS: replace the three table tokens.
 --
---   * SELECT statements only. No SET, so there is no search_path to lean on
---     and every table is written out in full.
---   * Addressing is <database>.<table>. Set "Default database name" to the
---     one holding these tables and the prefix below becomes optional. Leave
---     it in and it works either way.
+-- Clumio does not expose the tables under their own names. It flattens schema
+-- and table into one generated identifier, per backup:
+--
+--   kerbside_finance_settlements_dda39285_20260914_2c2e2d1db06211f19fc1f21...
+--   \_____________/ \_________/ \______/ \______/ \______________________/
+--      schema           table       id     backup       backup job id
+--                                          date
+--
+-- The suffix changes every time you take a backup, so these names cannot live
+-- in the repo. Get them from the table picker in the console and find-replace:
+--
+--   SETTLEMENTS_TABLE   ->  kerbside_finance_settlements_...
+--   ORDERS_TABLE        ->  kerbside_finance_orders_...
+--   ORDER_ITEMS_TABLE   ->  kerbside_finance_order_items_...
+--
+-- Set "Default database name" to the matching
+-- kerbside_..._rds_<account>_<region>_instance_<resource> entry and you do not
+-- need to prefix the database as well.
+--
+-- Other rules that editor enforces:
+--
+--   * SELECT statements only. No SET, so there is no search_path to lean on.
 --   * Paste ONE query at a time. Not the whole file.
---   * Kept to plain ANSI SQL - CAST rather than ::, no to_char, no FILTER -
---     so it does not depend on the engine behind the editor being Postgres.
+--   * The engine is not Postgres. An unaliased column comes back as _col0,
+--     which is the Presto/Trino convention, so this file sticks to plain ANSI:
+--     CAST rather than ::, no to_char, no FILTER, no alias called "day".
+--
+-- Because the names are tied to a backup, write these queries AFTER taking the
+-- backup you will actually demo from, and save the filled-in version. Taking
+-- the backup again invalidates them.
 --
 -- If a query returns nothing, see the troubleshooting section in
 -- docs/rds-audit-scenario.md before changing the SQL.
@@ -37,7 +59,7 @@ SELECT
   ROUND(s.commission_pence / 100.0, 2) AS commission_gbp,
   ROUND(s.net_paid_pence   / 100.0, 2) AS net_paid_gbp,
   s.payout_ref
-FROM kerbside_finance.settlements s
+FROM SETTLEMENTS_TABLE s
 WHERE s.tenant_slug = 'alma-kitchen'
   AND s.period_start BETWEEN DATE '2025-02-01' AND DATE '2025-02-28'
 ORDER BY s.period_start;
@@ -55,7 +77,7 @@ SELECT
   ROUND(o.gross_pence  / 100.0, 2) AS charged_gbp,
   ROUND(o.refund_pence / 100.0, 2) AS refunded_gbp,
   o.refund_reason
-FROM kerbside_finance.orders o
+FROM ORDERS_TABLE o
 WHERE o.tenant_slug = 'alma-kitchen'
   AND CAST(o.placed_at AS DATE) BETWEEN DATE '2025-02-10' AND DATE '2025-02-16'
   AND o.refund_pence > 0
@@ -65,12 +87,12 @@ ORDER BY o.placed_at;
 -- 3. The same week by day, which is the shape that reads on screen.
 -- Trading stops dead on the 12th and does not resume until the 16th.
 SELECT
-  CAST(o.placed_at AS DATE)                           AS day,
+  CAST(o.placed_at AS DATE)                           AS order_day,
   COUNT(*)                                            AS orders,
   SUM(CASE WHEN o.refund_pence > 0 THEN 1 ELSE 0 END) AS refunded,
   ROUND(SUM(o.gross_pence)  / 100.0, 2)               AS charged_gbp,
   ROUND(SUM(o.refund_pence) / 100.0, 2)               AS refunded_gbp
-FROM kerbside_finance.orders o
+FROM ORDERS_TABLE o
 WHERE o.tenant_slug = 'alma-kitchen'
   AND CAST(o.placed_at AS DATE) BETWEEN DATE '2025-02-10' AND DATE '2025-02-16'
 GROUP BY CAST(o.placed_at AS DATE)
@@ -88,8 +110,8 @@ SELECT
   oi.quantity,
   ROUND(oi.unit_price_pence / 100.0, 2) AS unit_price_gbp,
   ROUND(oi.line_total_pence / 100.0, 2) AS line_total_gbp
-FROM kerbside_finance.orders o
-JOIN kerbside_finance.order_items oi
+FROM ORDERS_TABLE o
+JOIN ORDER_ITEMS_TABLE oi
   ON oi.order_id = o.order_id
 WHERE o.tenant_slug = 'alma-kitchen'
   AND o.refund_reason = 'restaurant-cancelled'
@@ -103,7 +125,7 @@ SELECT
   o.refund_reason,
   COUNT(*)                              AS refunded_orders,
   ROUND(SUM(o.refund_pence) / 100.0, 2) AS total_refunded_gbp
-FROM kerbside_finance.orders o
+FROM ORDERS_TABLE o
 WHERE o.tenant_slug = 'alma-kitchen'
   AND CAST(o.placed_at AS DATE) BETWEEN DATE '2025-02-10' AND DATE '2025-02-16'
   AND o.refund_pence > 0
@@ -112,12 +134,13 @@ ORDER BY 3 DESC;
 
 
 -- ---------------------------------------------------------------------------
--- If nothing comes back, run this first. It is the smallest possible query
--- and it tells you whether the editor can see the table at all.
+-- If nothing comes back, run this first. It is the smallest possible query and
+-- it tells you whether the editor can see the table at all, which is a
+-- different problem from the query being wrong.
 --
---   SELECT COUNT(*) FROM kerbside_finance.settlements
+--   SELECT COUNT(*) FROM SETTLEMENTS_TABLE
 --
--- Expect 23000. If that errors, the problem is addressing rather than your
--- query: check the "Default database name" dropdown, then try the table
--- unqualified, then quoted as "kerbside_finance"."settlements".
+-- Expect 23000. If it errors, the name is wrong rather than the query: go back
+-- to the table picker and copy it again. If it returns 0, the backup is older
+-- than the data load and you need to take it again.
 -- ---------------------------------------------------------------------------

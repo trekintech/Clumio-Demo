@@ -284,46 +284,73 @@ This does not run in pgAdmin. It goes in the **Clumio query editor**, against
 the backup taken in step 5. The full file is `sql/03-audit-query.sql`, which
 holds five queries.
 
-That editor is stricter than pgAdmin, and the file is written for it:
+That editor is stricter than pgAdmin, and works differently enough that the
+file has to be filled in before it will run.
 
-- **SELECT statements only.** There is no `SET`, so `search_path` is not
-  available and every table is written out as `kerbside_finance.settlements`
-  rather than `settlements`.
-- **Addressing is `<database>.<table>`**, two-part, set by the **Default
-  database name** dropdown at the top. Open that dropdown before you type
-  anything and see what it lists.
-- **Paste one query at a time.** Not the whole file.
-- The SQL is kept to plain ANSI — `CAST(x AS DATE)` rather than `x::date`, no
-  `to_char`, no `FILTER` — so it does not depend on the engine behind the
-  editor being Postgres.
+### Table names are generated per backup
+
+Clumio does not expose the tables under their own names. It flattens schema and
+table into a single identifier with the backup baked into it:
+
+```
+kerbside_finance_settlements_dda39285_20260914_2c2e2d1db06211f19fc1f219e1933199
+└─── schema ───┘└─ table ──┘└─ id ──┘└─ date ┘└────── backup job id ──────┘
+```
+
+The suffix changes every time you take a backup, so these cannot live in the
+repo. `sql/03-audit-query.sql` uses three tokens instead. Get the real names
+from the table picker in the console and find-replace:
+
+| Token | Replace with |
+|---|---|
+| `SETTLEMENTS_TABLE` | `kerbside_finance_settlements_…` |
+| `ORDERS_TABLE` | `kerbside_finance_orders_…` |
+| `ORDER_ITEMS_TABLE` | `kerbside_finance_order_items_…` |
+
+Set **Default database name** to the matching
+`kerbside_…_rds_<account>_<region>_instance_<resource>` entry and you do not
+need to prefix the database as well.
+
+Do this **after** taking the backup you will actually demo from, and save the
+filled-in queries. Taking the backup again invalidates every name in them.
+
+### The engine is not Postgres
+
+An unaliased column comes back as `_col0`, which is the Presto/Trino
+convention. So the file sticks to plain ANSI: `CAST(x AS DATE)` rather than
+`x::date`, no `to_char`, no `FILTER`, and no column aliased `day` because that
+is a function name there. If you write your own query against this data, stay
+inside that subset.
+
+Also: **SELECT statements only**, so there is no `SET` and no `search_path`,
+and **paste one query at a time** rather than the whole file.
 
 ### If it returns nothing
 
-Run the smallest possible query first. It tells you whether the editor can see
-the table at all, which is a different problem from your query being wrong:
+Run the smallest possible query first. It separates "the editor cannot see the
+table" from "my query is wrong":
 
 ```sql
-SELECT COUNT(*) FROM kerbside_finance.settlements
+SELECT COUNT(*) FROM SETTLEMENTS_TABLE
 ```
 
-Expect **23000**. Working through it from there:
+Expect **23000**.
 
-1. **Did you leave `SET search_path` in?** It is not a SELECT. Drop it, and
-   qualify the table names instead. This is the most likely cause.
-2. **Is the right database selected?** The dropdown defaults to whatever it
-   found first, which may be an unrelated database on the same instance. If the
-   dropdown lists `kerbside_finance`, select it and the prefix becomes
-   optional. If it lists the database you loaded into instead, keep the prefix.
-3. **Try the name three ways**: `kerbside_finance.settlements`, then
-   `settlements` unqualified with the right database selected, then
-   `"kerbside_finance"."settlements"` quoted.
-4. **Check the backup is newer than the load.** The backup timestamp is shown
-   at the top of the same panel. If you backed up before running
-   `01-schema-and-data.sql`, the tables are genuinely not in it and no amount
-   of query fiddling will help. Take the backup again.
+- **Errors** — the name is wrong rather than the query. Copy it again from the
+  table picker; the suffix is long and easy to truncate.
+- **Returns 0** — the backup is older than the data load. The tables are
+  genuinely not in it. Take the backup again.
+- **Returns 23000 but your query still gives nothing** — check you replaced
+  every token, including the two in query 4.
 
 The red wavy underlines in the editor are the browser's spellchecker on a plain
 textarea, not SQL errors. Ignore them.
+
+### Worth saying on camera
+
+Those generated table names are ugly, and that is useful. They are visible
+proof you are not querying production: the name has the backup date and job id
+in it. Point at it once.
 
 **Query 1 — the payouts in dispute.** The same four rows as step 4, plus the
 commission rate and payout reference. This is the one that answers the
@@ -336,15 +363,18 @@ This is the CSV you export.
 
 **Query 3 — the same thing by day.** This is the one that reads on screen:
 
-| day | weekday | orders | refunded | charged_gbp | refunded_gbp |
-|---|---|---|---|---|---|
-| 2025-02-10 | Mon | 3 | 0 | 94.53 | 0.00 |
-| 2025-02-11 | Tue | 5 | 1 | 108.18 | 12.85 |
-| 2025-02-12 | Wed | 4 | 4 | 189.83 | 189.83 |
-| 2025-02-13 | Thu | 6 | 6 | 202.32 | 202.32 |
-| 2025-02-14 | Fri | 6 | 6 | 258.32 | 258.32 |
-| 2025-02-15 | Sat | 9 | 9 | 284.79 | 284.79 |
-| 2025-02-16 | Sun | 6 | 1 | 174.75 | 38.55 |
+| order_day | orders | refunded | charged_gbp | refunded_gbp |
+|---|---|---|---|---|
+| 2025-02-10 | 3 | 0 | 94.53 | 0.00 |
+| 2025-02-11 | 5 | 1 | 108.18 | 12.85 |
+| 2025-02-12 | 4 | 4 | 189.83 | 189.83 |
+| 2025-02-13 | 6 | 6 | 202.32 | 202.32 |
+| 2025-02-14 | 6 | 6 | 258.32 | 258.32 |
+| 2025-02-15 | 9 | 9 | 284.79 | 284.79 |
+| 2025-02-16 | 6 | 1 | 174.75 | 38.55 |
+
+There is no weekday column: `to_char` does not exist in that engine. The 12th
+is the Wednesday and the 15th the Saturday, so say it rather than showing it.
 
 Four consecutive days where charged and refunded are the same number, including
 the Friday and Saturday that carry the week. Nobody needs the story explained
