@@ -364,7 +364,7 @@ Expect **23000**.
 - **Returns 0.** The backup is older than the data load, so the tables really
   aren't in it. Take the backup again.
 - **Returns 23000 but your query still gives nothing.** Check you replaced
-  every token, including both of them in query 4.
+  every token, including both of them in query 3, which joins two tables.
 
 The red wavy underlines in the editor are the browser's spellchecker on a plain
 textarea, not SQL errors. Ignore them.
@@ -375,16 +375,56 @@ Those generated table names are ugly, which is useful. They're visible proof
 you aren't querying production, because the name has the backup date and job id
 in it. Point at it once.
 
-**Query 1 — the payouts in dispute.** The same four rows as step 4, plus the
-commission rate and payout reference. This is the one that answers the
-accountant.
+Below is every query you paste, in order, with what should come back. Swap the
+three table tokens for the generated names from the schema browser first. The
+copy icon beside each table name in that panel saves you retyping them.
 
-**Query 2 — the refunds itemised.** 27 rows: the 25 cancellations plus two
-ordinary item-unavailable refunds that happened to fall in the same week. Order
-IDs, timestamps, channel, payment method, amount charged and amount refunded.
-This is the CSV you export.
+### Query 1: what was paid  ·  recorded as R3
 
-**Query 3 — the same thing by day.** This is the one that reads on screen:
+The accountant's question. Four rows.
+
+```sql
+SELECT
+  s.period_start                       AS week_beginning,
+  s.period_end                         AS week_ending,
+  s.order_count                        AS orders,
+  ROUND(s.gross_pence      / 100.0, 2) AS gross_gbp,
+  ROUND(s.refunds_pence    / 100.0, 2) AS refunds_gbp,
+  ROUND(s.commission_bps   / 100.0, 2) AS commission_pct,
+  ROUND(s.commission_pence / 100.0, 2) AS commission_gbp,
+  ROUND(s.net_paid_pence   / 100.0, 2) AS net_paid_gbp,
+  s.payout_ref
+FROM SETTLEMENTS_TABLE s
+WHERE s.tenant_slug = 'alma-kitchen'
+  AND CAST(s.period_start AS DATE) BETWEEN DATE '2025-02-01' AND DATE '2025-02-28'
+ORDER BY s.period_start;
+```
+
+| week_beginning | orders | gross_gbp | refunds_gbp | commission_gbp | net_paid_gbp |
+|---|---|---|---|---|---|
+| 2025-02-03 | 35 | 1218.73 | 17.8 | 216.17 | 984.76 |
+| 2025-02-10 | 39 | 1312.72 | 986.66 | 58.69 | 267.37 |
+| 2025-02-17 | 37 | 964.82 | 0.0 | 173.67 | 791.15 |
+| 2025-02-24 | 38 | 1174.47 | 47.95 | 202.77 | 923.75 |
+
+The week of the 10th paid a third of the others and took more orders than any
+of them. That contradiction is what makes the next query necessary.
+
+### Query 2: the same week by day  ·  recorded as R4
+
+```sql
+SELECT
+  SUBSTR(o.placed_at, 1, 10)                          AS order_day,
+  COUNT(*)                                            AS orders,
+  SUM(CASE WHEN o.refund_pence > 0 THEN 1 ELSE 0 END) AS refunded,
+  ROUND(SUM(o.gross_pence)  / 100.0, 2)               AS charged_gbp,
+  ROUND(SUM(o.refund_pence) / 100.0, 2)               AS refunded_gbp
+FROM ORDERS_TABLE o
+WHERE o.tenant_slug = 'alma-kitchen'
+  AND SUBSTR(o.placed_at, 1, 10) BETWEEN '2025-02-10' AND '2025-02-16'
+GROUP BY SUBSTR(o.placed_at, 1, 10)
+ORDER BY 1;
+```
 
 | order_day | orders | refunded | charged_gbp | refunded_gbp |
 |---|---|---|---|---|
@@ -396,28 +436,88 @@ This is the CSV you export.
 | 2025-02-15 | 9 | 9 | 284.79 | 284.79 |
 | 2025-02-16 | 6 | 1 | 174.75 | 38.55 |
 
-That's copied from the console, not from Postgres. The engine trims trailing
-zeros, so a round number shows as `0.0` rather than `0.00`.
+Four days running where charged and refunded are the same number, including the
+Friday and Saturday that carry the week. Nobody needs it explained after that.
 
-There's no weekday column because `to_char` doesn't exist in that engine. The
-12th is the Wednesday and the 15th the Saturday, so say it rather than show
-it.
+That's copied from the console rather than Postgres. The engine trims trailing
+zeros, so a round number reads `0.0` not `0.00`. There's no weekday column
+because `to_char` doesn't exist there, so say "Wednesday to Saturday" rather
+than showing it.
 
-Four consecutive days where charged and refunded are the same number, including
-the Friday and Saturday that carry the week. Nobody needs the story explained
-after seeing that.
+### Query 3: the baskets  ·  recorded as R5
 
-**Query 4 — the baskets behind the cancelled orders over £50.** 19 rows:
-dish, quantity, unit price, joined into the 2 million order lines. The answer
-to "how do we know these refunds were real orders and not an adjustment
-someone posted".
+Cancelled orders over £50, joined into the 2 million order lines. 19 rows.
 
-**Query 5 — the one-line answer**, for when it gets asked a third time:
+```sql
+SELECT
+  o.order_id,
+  o.placed_at,
+  oi.dish_name,
+  oi.quantity,
+  ROUND(oi.unit_price_pence / 100.0, 2) AS unit_price_gbp,
+  ROUND(oi.line_total_pence / 100.0, 2) AS line_total_gbp
+FROM ORDERS_TABLE o
+JOIN ORDER_ITEMS_TABLE oi
+  ON oi.order_id = o.order_id
+WHERE o.tenant_slug = 'alma-kitchen'
+  AND o.refund_reason = 'restaurant-cancelled'
+  AND SUBSTR(o.placed_at, 1, 10) BETWEEN '2025-02-10' AND '2025-02-16'
+  AND o.gross_pence >= 5000
+ORDER BY o.gross_pence DESC, o.order_id, oi.order_item_id;
+```
+
+Order 10000226, 19:01 on Wednesday the 12th, collection, £75.65:
+
+| dish_name | quantity | unit_price_gbp | line_total_gbp |
+|---|---|---|---|
+| Tonkotsu ramen | 2 | 12.85 | 25.7 |
+| Gyoza | 2 | 6.45 | 12.9 |
+| Katsu curry | 3 | 12.35 | 37.05 |
+
+Somebody's dinner, not a journal entry. And it's a join across two million rows
+inside a backup, which is the bit the engineers came for.
+
+### Not recorded, but keep them to hand
+
+**The itemised refunds.** 27 rows: the 25 cancellations plus two ordinary
+item-unavailable refunds that landed in the same week. This is the CSV you'd
+actually send an accountant, so have it ready if someone asks.
+
+```sql
+SELECT
+  o.order_id,
+  o.placed_at,
+  o.channel,
+  o.payment_method,
+  ROUND(o.gross_pence  / 100.0, 2) AS charged_gbp,
+  ROUND(o.refund_pence / 100.0, 2) AS refunded_gbp,
+  o.refund_reason
+FROM ORDERS_TABLE o
+WHERE o.tenant_slug = 'alma-kitchen'
+  AND SUBSTR(o.placed_at, 1, 10) BETWEEN '2025-02-10' AND '2025-02-16'
+  AND o.refund_pence > 0
+ORDER BY o.placed_at;
+```
+
+**The one-liner**, for when it gets asked a third time from the floor.
+
+```sql
+SELECT
+  o.refund_reason,
+  COUNT(*)                              AS refunded_orders,
+  ROUND(SUM(o.refund_pence) / 100.0, 2) AS total_refunded_gbp
+FROM ORDERS_TABLE o
+WHERE o.tenant_slug = 'alma-kitchen'
+  AND SUBSTR(o.placed_at, 1, 10) BETWEEN '2025-02-10' AND '2025-02-16'
+  AND o.refund_pence > 0
+GROUP BY o.refund_reason
+ORDER BY 3 DESC;
+```
 
 | refund_reason | refunded_orders | total_refunded_gbp |
 |---|---|---|
 | restaurant-cancelled | 25 | 935.26 |
-| item-unavailable | 2 | 51.40 |
+| item-unavailable | 2 | 51.4 |
 
 ---
 
@@ -438,6 +538,27 @@ as "here's a query tool" and it dies.
 Three is the number. One doesn't show it's a real engine, and five is a man
 reading SQL out loud.
 
+**R1, in pgAdmin against production.** This is the one you run first, on
+camera, and it comes back empty:
+
+```sql
+SET search_path TO kerbside_finance;
+
+SELECT period_start                          AS week_beginning,
+       order_count                           AS orders,
+       ROUND(gross_pence      / 100.0, 2)    AS gross_gbp,
+       ROUND(refunds_pence    / 100.0, 2)    AS refunds_gbp,
+       ROUND(commission_pence / 100.0, 2)    AS commission_gbp,
+       ROUND(net_paid_pence   / 100.0, 2)    AS net_paid_gbp
+FROM settlements
+WHERE tenant_slug = 'alma-kitchen'
+  AND period_start BETWEEN DATE '2025-02-01' AND DATE '2025-02-28'
+ORDER BY period_start;
+```
+
+That's ordinary Postgres, because pgAdmin is talking to the real database. The
+three Clumio queries are written differently, and step 7 explains why.
+
 **Why each one follows the last.** Don't present these as three things the
 product can do. Each one's there because the one before left a question open:
 
@@ -457,15 +578,19 @@ necessary rather than just interesting.
 |---|---|---|---|
 | R1 | pgAdmin, against production | The auditor's question | 0 |
 | R2 | Clumio Record restore | The backup, and the schema browser beside it | — |
-| R3 | Clumio query editor | Query 1: the four February payouts | 4 |
-| R4 | Clumio query editor | Query 3: the same week by day | 7 |
-| R5 | Clumio query editor | Query 4: the baskets behind the cancellations | 19 |
+| R3 | Clumio query editor | Query 1: what was paid | 4 |
+| R4 | Clumio query editor | Query 2: the same week by day | 7 |
+| R5 | Clumio query editor | Query 3: the baskets | 19 |
 | R6 | Export | Download as CSV, open it | — |
 
-Queries 2 and 5 stay in the file but don't get recorded. Query 2 is the
-itemised list you'd actually send an accountant, so have it ready in case
-someone asks to see it. Query 5 collapses the answer to one line for when the
-question comes back from the floor.
+Queries 4 and 5 in the file don't get recorded. Query 4 is the itemised list
+you'd actually send an accountant, so have it ready in case someone asks.
+Query 5 collapses the answer to one line for when the question comes back from
+the floor.
+
+All of them are written out with their expected results in
+[step 7](#step-7-query-the-archive), so you can copy them from there on the
+day rather than opening the file.
 
 **Narration**
 

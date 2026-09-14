@@ -65,7 +65,7 @@
 -- ---------------------------------------------------------------------------
 
 
--- 1. The payouts in dispute.   [RECORDED - segment R3]
+-- 1. What was paid.   [RECORDED - segment R3]
 --
 -- Read the order count alongside the payout. The week beginning 10 February
 -- took a normal number of orders and paid out about a third of the weeks
@@ -86,26 +86,7 @@ WHERE s.tenant_slug = 'alma-kitchen'
 ORDER BY s.period_start;
 
 
--- 2. The refunds itemised.   [NOT recorded - keep ready for questions]
---
--- This is the evidence that goes back to the accountant. Export it as CSV.
--- Four consecutive days of cancellations, every order refunded in full.
-SELECT
-  o.order_id,
-  o.placed_at,
-  o.channel,
-  o.payment_method,
-  ROUND(o.gross_pence  / 100.0, 2) AS charged_gbp,
-  ROUND(o.refund_pence / 100.0, 2) AS refunded_gbp,
-  o.refund_reason
-FROM ORDERS_TABLE o
-WHERE o.tenant_slug = 'alma-kitchen'
-  AND SUBSTR(o.placed_at, 1, 10) BETWEEN '2025-02-10' AND '2025-02-16'
-  AND o.refund_pence > 0
-ORDER BY o.placed_at;
-
-
--- 3. The same week by day.   [RECORDED - segment R4. The shot that carries it]
+-- 2. The same week by day.   [RECORDED - segment R4. The shot that carries it]
 -- Trading stops dead on the 12th and doesn't resume until the 16th.
 SELECT
   SUBSTR(o.placed_at, 1, 10)                          AS order_day,
@@ -120,7 +101,7 @@ GROUP BY SUBSTR(o.placed_at, 1, 10)
 ORDER BY 1;
 
 
--- 4. The baskets behind the cancellations.   [RECORDED - segment R5]
+-- 3. The baskets behind the cancellations.   [RECORDED - segment R5]
 -- These were real orders, not adjustments. The lines behind the largest
 -- cancelled orders, joined into two million order lines.
 --
@@ -140,6 +121,25 @@ WHERE o.tenant_slug = 'alma-kitchen'
   AND SUBSTR(o.placed_at, 1, 10) BETWEEN '2025-02-10' AND '2025-02-16'
   AND o.gross_pence >= 5000
 ORDER BY o.gross_pence DESC, o.order_id, oi.order_item_id;
+
+
+-- 4. The refunds itemised.   [NOT recorded - the CSV you would send an accountant]
+--
+-- This is the evidence that goes back to the accountant. Export it as CSV.
+-- Four consecutive days of cancellations, every order refunded in full.
+SELECT
+  o.order_id,
+  o.placed_at,
+  o.channel,
+  o.payment_method,
+  ROUND(o.gross_pence  / 100.0, 2) AS charged_gbp,
+  ROUND(o.refund_pence / 100.0, 2) AS refunded_gbp,
+  o.refund_reason
+FROM ORDERS_TABLE o
+WHERE o.tenant_slug = 'alma-kitchen'
+  AND SUBSTR(o.placed_at, 1, 10) BETWEEN '2025-02-10' AND '2025-02-16'
+  AND o.refund_pence > 0
+ORDER BY o.placed_at;
 
 
 -- 5. The one-line answer.   [NOT recorded - for when it's asked from the floor]
