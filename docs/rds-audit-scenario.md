@@ -375,9 +375,24 @@ Those generated table names are ugly, which is useful. They're visible proof
 you aren't querying production, because the name has the backup date and job id
 in it. Point at it once.
 
-Below is every query you paste, in order, with what should come back. Swap the
-three table tokens for the generated names from the schema browser first. The
-copy icon beside each table name in that panel saves you retyping them.
+Below is every query you paste, in order, with what should come back.
+
+Before you run any of them, swap the three table tokens for the generated names
+from the schema browser. Use the copy icon beside each table name in that panel
+rather than retyping.
+
+Two ways this goes wrong, both of them easy to miss:
+
+- **Replace the token with the table name and nothing else.** If your clipboard
+  still holds the whole query block when you hit replace, you end up with
+  `FROM SELECT ... FROM <table> ...` nested inside itself. It looks like a
+  query that returns nothing rather than an obvious error.
+- **Drop the trailing semicolon** if the editor complains. It takes one query
+  at a time and a semicolon can read as a statement separator. The semicolons
+  are in the file so it stays readable as a file.
+
+You don't need the `<database>.` prefix either, as long as **Default database
+name** is set to the matching instance. Table name alone is enough.
 
 ### Query 1: what was paid  ·  recorded as R3
 

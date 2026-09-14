@@ -30,7 +30,12 @@
 -- Other rules that editor enforces:
 --
 --   * SELECT statements only. No SET, so there's no search_path to lean on.
---   * Paste ONE query at a time. Not the whole file.
+--   * Paste ONE query at a time. Not the whole file. Drop the trailing
+--     semicolon if the editor objects to it.
+--   * When you find-replace a token, make sure the clipboard holds the table
+--     NAME and not the query block. Replacing a token with a whole query
+--     nests it inside itself and the result looks like a query that simply
+--     returns nothing.
 --   * The engine isn't Postgres. An unaliased column comes back as _col0,
 --     which is the Presto/Trino convention, so this file sticks to plain ANSI:
 --     CAST rather than ::, no to_char, no FILTER, no alias called "day".
