@@ -74,26 +74,95 @@ not to the world, even in a sandbox.
 The order matters. The purge has to come after the backup, or there is nothing
 in the archive to query and the demo has no ending.
 
-**1. Load.** Run `sql/01-schema-and-data.sql` in pgAdmin, or:
+Three SQL files, run in order, with the Clumio backup between the first and the
+second. The first two go in pgAdmin against your own instance. The third does
+not: it runs in the Clumio query editor against the archive.
+
+### 1. Connect pgAdmin to the instance
+
+Object Explorer, on the left. Right-click **Servers**, then **Register** →
+**Server…**
+
+- **General** tab: Name, anything. `Kerbside RDS` will do.
+- **Connection** tab: Host is the RDS endpoint
+  (`something.eu-west-2.rds.amazonaws.com`), Port `5432`, Maintenance database
+  is your database name, then username and password. Tick **Save password**.
+- **Parameters** tab: leave SSL mode at `prefer`. RDS accepts it.
+
+If it sits there and then times out, it is the security group rather than
+anything in pgAdmin. Inbound TCP 5432 from your own IP, not from 0.0.0.0/0.
+
+### 2. Open a Query Tool on the right database
+
+Expand **Servers → your server → Databases** and click your database once so it
+is selected. Then **Tools → Query Tool**, or right-click the database and pick
+Query Tool from there.
+
+The Query Tool connects to whatever was selected when you opened it. Open it
+with `postgres` highlighted and that is where the schema lands. Check the tab
+title names your database before running anything.
+
+### 3. Load the data
+
+The folder icon in the Query Tool toolbar opens a file. Point it at
+`sql/01-schema-and-data.sql` in your clone. Opening the file in a text editor
+and pasting it in works just as well, and avoids pgAdmin's file dialog.
+
+**F5** runs it. The script creates the schema and generates Q1 2025: 810 orders
+across three restaurants, and the weekly settlements derived from them. It
+drops and recreates `kerbside_finance` at the top, so re-running it is safe and
+nothing else in the database is affected.
+
+Two things about pgAdmin worth knowing before you trust what you see:
+
+- **Data Output only shows the last result set.** The script ends with four
+  SELECTs, so you get Alma Kitchen's February payouts and nothing else. To see
+  the two reconciliation checks, highlight just those two queries and press F5.
+  pgAdmin runs only the selection when there is one. Both must report `0`
+  failures.
+- **`search_path` is per-session.** Each file sets it at the top, so running
+  whole files is fine. If you highlight a query from the middle of a file and
+  run only that, include the `SET search_path` line in the selection or you
+  will get `relation "orders" does not exist`.
+
+The figure to look for: week beginning 2025-02-10 nets **£168.40**, against
+roughly £320 in the weeks either side.
+
+Or from a terminal, if you would rather:
 
 ```bash
 psql -h <endpoint> -U <user> -d <database> -f sql/01-schema-and-data.sql
 ```
 
-It creates the schema and generates Q1 2025: 810 orders across three
-restaurants and the weekly settlements derived from them. It ends with two
-checks that should both report zero failures, and prints Alma Kitchen's
-February payouts as they stand.
+`psql` prints every result set, so the checks are visible without selecting
+anything.
 
-**2. Back up.** In Clumio, back the instance up to **SecureVault Archive**.
+### 4. Back up
 
-**3. Purge.** Run `sql/02-retention-purge.sql`. It deletes everything before
-August 2025 under the 13-month retention rule, prints the remaining counts
-(zero), and then runs the auditor's question against production so you can see
-it return nothing.
+In Clumio, back the instance up to **SecureVault Archive**, and request the
+thaw at the same time. It takes up to 48 hours.
+
+Do not move on until this has run. The purge cannot be undone against
+production, and after it the archive is the only copy. That is the demo, but
+only if the backup exists first.
+
+### 5. Purge
+
+Same Query Tool. Open `sql/02-retention-purge.sql` and run it.
+
+It deletes everything before August 2025 under the 13-month retention rule,
+prints the remaining counts (zero), and then runs the auditor's question
+against production so you can see it return nothing.
 
 That last query is worth filming. It is the difference between telling the
 audience the data is gone and showing them.
+
+### 6. The audit query
+
+`sql/03-audit-query.sql` does not run in pgAdmin. It goes in the Clumio query
+editor, against the thawed archive. Query 1 is the payout comparison, query 2
+is the ten duplicate charges itemised, and query 2 is the one you export as
+CSV.
 
 ## Recording it
 
