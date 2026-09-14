@@ -492,5 +492,5 @@ alone is usually cheaper than tearing down and re-seeding.
   `DISH_ICONS` in `scripts/seed.js`. It holds up at 1080p, but swap in real
   photography if you want the gallery to look richer.
 - The RDS scenario lives in [docs/rds-audit-scenario.md](docs/rds-audit-scenario.md)
-  with its SQL in `sql/`. It needs an RDS instance you provision yourself, and
-  the Archive thaw means it has to be prepared days ahead.
+  with its SQL in `sql/`. It needs a PostgreSQL RDS instance you provision
+  yourself, and is prepared and recorded separately from the other three clips.

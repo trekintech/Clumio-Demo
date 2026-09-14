@@ -170,12 +170,12 @@ so it's the one that survives being told rather than shown.
 
 ## RDS
 
-Recorded separately, and it has to be prepared days ahead: the Archive thaw
-takes up to 48 hours, so request it at least two days before you film.
+Recorded separately, against your own PostgreSQL RDS instance. Load the data
+and take the Clumio backup before the session rather than on camera.
 
-Full shot list, narration and SQL are in
+Full step-by-step, shot list, narration and SQL are in
 [rds-audit-scenario.md](rds-audit-scenario.md). It is an audit and compliance
-story, not recovery speed. Never imply it is fast, and never imply Instant
+story, not recovery speed. Don't sell it as fast, and never imply Instant
 Access applies to it — that is Standard tier and a different capability.
 
 ---

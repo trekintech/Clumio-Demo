@@ -43,10 +43,10 @@ The three capabilities being shown:
 
 ## Accuracy notes — important
 
-The RDS capability requires the SecureVault **Archive** tier and has a thaw
-period of **up to 48 hours**. It is therefore an *audit and compliance* story,
-not a fast-recovery story. Do not write copy anywhere in this repo that implies
-RDS query is instant.
+The RDS capability requires the SecureVault **Archive** tier. It is an *audit
+and compliance* story, not a fast-recovery story. Do not write copy anywhere in
+this repo that implies RDS query is instant, and do not add duration or RTO
+claims to it in either direction.
 
 S3 Instant Access provides a **read-only S3 access point** at a point in time,
 usable as a CloudFront origin with OAC. It is a recovery and audit tool: stood
@@ -241,9 +241,9 @@ wrong?" needs to hear "different mechanism, different scenario," not silence.
 
 **Tier constraint:** Instant Access is Standard tier only and is not
 supported on SecureVault Archive. That's a separate, harder constraint from
-the RDS Archive/48-hour-thaw note above — the two capabilities sit on
-different tiers with different recovery shapes, so don't imply Instant
-Access could ever apply to the RDS scenario or vice versa.
+the RDS Archive note above — the two capabilities sit on different tiers
+with different recovery shapes, so don't imply Instant Access could ever
+apply to the RDS scenario or vice versa.
 
 **Instant Access being read-only does not need — and must not get — a UI
 banner.** This app has no order-placement or S3-write path in its own UI to
