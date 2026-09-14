@@ -13,8 +13,8 @@ restores a production database inside 48 hours to settle an invoice query.
 
 ## The story
 
-Kerbside pays its restaurants weekly. Those payments live in an RDS MySQL
-database, and production keeps 13 months of them. Anything older is purged and
+Kerbside pays its restaurants weekly. Those payments live in an RDS
+PostgreSQL database, and production keeps 13 months of them. Anything older is purged and
 lives only in the archived backup.
 
 In September 2026, Alma Kitchen's accountant disputes their February 2025
@@ -39,76 +39,61 @@ itemised, in a file you can send back.
 That is a better ending than "we recovered the data". The business got an
 answer, not a restore.
 
-## What to build
+## What you need
 
-A deliberately small MySQL instance. It holds three tables and around 800
-rows; nothing here needs capacity.
+An RDS **PostgreSQL** instance you can reach from pgAdmin or psql. If you
+already have one, use it: everything goes into its own `kerbside_finance`
+schema, so it cannot collide with anything else on the instance and drops
+cleanly afterwards. Three tables and around 800 rows; nothing here needs
+capacity.
 
-Provision it with the AWS CLI rather than a script in this repo. The VPC,
-subnet group and security group choices are specific to your account, and the
-repo has no database driver to load data with.
+If you are standing one up specifically for this, keep it small and delete it
+afterwards:
 
 ```bash
 aws rds create-db-instance \
   --db-instance-identifier kerbside-finance \
-  --engine mysql \
+  --engine postgres \
   --db-instance-class db.t4g.micro \
   --allocated-storage 20 \
   --storage-type gp3 \
-  --master-username admin \
+  --master-username postgres \
   --manage-master-user-password \
   --no-multi-az \
-  --backup-retention-period 1 \
   --publicly-accessible \
   --region eu-west-2
 ```
 
 `--manage-master-user-password` puts the password in Secrets Manager rather
-than in your shell history or this repo. Retrieve it from the Secrets Manager
-console when you connect.
-
-`db.t4g.micro` with 20GB single-AZ is the smallest sensible shape and is the
-class the free tier covers, if your account still has free tier available.
-Assume it does not and delete the instance afterwards.
-
-`--publicly-accessible` is there so you can load data from your laptop. Lock
-the security group to your own IP on port 3306. Do not open it to the world,
-even for a sandbox.
-
-Wait for it to come up, then take the endpoint:
-
-```bash
-aws rds wait db-instance-available --db-instance-identifier kerbside-finance
-aws rds describe-db-instances --db-instance-identifier kerbside-finance \
-  --query 'DBInstances[0].Endpoint.Address' --output text
-```
+than in your shell history or this repo. `--publicly-accessible` is only so you
+can reach it from your laptop: lock the security group to your own IP on 5432,
+not to the world, even in a sandbox.
 
 ## Load, back up, purge
 
-Order matters. The purge has to happen after the backup or there is nothing in
-the archive to query.
+The order matters. The purge has to come after the backup, or there is nothing
+in the archive to query and the demo has no ending.
+
+**1. Load.** Run `sql/01-schema-and-data.sql` in pgAdmin, or:
 
 ```bash
-mysql -h <endpoint> -u admin -p < sql/01-schema-and-data.sql
+psql -h <endpoint> -U <user> -d <database> -f sql/01-schema-and-data.sql
 ```
 
-That creates the schema and generates Q1 2025: 810 orders across three
-restaurants, and the weekly settlements derived from them. It finishes with two
-checks that both report zero failures, because an auditor's first move is to
-ask whether the payouts reconcile to the transactions.
+It creates the schema and generates Q1 2025: 810 orders across three
+restaurants and the weekly settlements derived from them. It ends with two
+checks that should both report zero failures, and prints Alma Kitchen's
+February payouts as they stand.
 
-Then, in Clumio: back the instance up to **SecureVault Archive**.
+**2. Back up.** In Clumio, back the instance up to **SecureVault Archive**.
 
-Then purge, which is what makes the scenario real:
+**3. Purge.** Run `sql/02-retention-purge.sql`. It deletes everything before
+August 2025 under the 13-month retention rule, prints the remaining counts
+(zero), and then runs the auditor's question against production so you can see
+it return nothing.
 
-```bash
-mysql -h <endpoint> -u admin -p < sql/02-retention-purge.sql
-```
-
-That deletes everything before August 2025 under the 13-month retention rule
-and prints the remaining counts, which are zero. Worth filming: it is the proof
-that the data genuinely is not in production, rather than something the
-audience has to take your word for.
+That last query is worth filming. It is the difference between telling the
+audience the data is gone and showing them.
 
 ## Recording it
 
@@ -117,7 +102,7 @@ you record.** There is no version of this where you start the thaw on camera.
 
 | Seg | Capture | Doing |
 |---|---|---|
-| R1 | Terminal, against production | Run the auditor's question. Zero rows. |
+| R1 | pgAdmin, against production | Run the auditor's question. No rows. |
 | R2 | Clumio console | The archived backup, already thawed |
 | R3 | Clumio query editor | Paste query 1 from `sql/03-audit-query.sql` |
 | R4 | Results | The 10 February row against the weeks either side |
@@ -147,6 +132,16 @@ you record.** There is no version of this where you start the thaw on camera.
 
 ## Afterwards
 
+If you used an existing instance, just drop the schema. Nothing else on the
+instance is affected:
+
+```sql
+DROP SCHEMA kerbside_finance CASCADE;
+```
+
+If you created an instance for this, delete it. An idle RDS instance bills by
+the hour whether anyone queries it or not:
+
 ```bash
 aws rds delete-db-instance \
   --db-instance-identifier kerbside-finance \
@@ -154,21 +149,20 @@ aws rds delete-db-instance \
   --delete-automated-backups
 ```
 
-An idle RDS instance bills by the hour whether anyone queries it or not, so
-this is the one piece of the demo estate worth deleting promptly rather than
-leaving up between rehearsals. `npm run teardown` does not touch it: that only
-handles the DynamoDB table and the S3 bucket.
+`npm run teardown` touches neither. It only handles the DynamoDB table and the
+S3 bucket.
 
 Clean up the Clumio backup and the thawed archive in the Clumio console.
 
 ## A note on the SQL
 
-It targets MySQL 8.0 or later, which is what RDS gives you by default. It uses
-recursive CTEs to generate the orders and window-free aggregation to build the
-settlements from them.
+It targets PostgreSQL and lives in a `kerbside_finance` schema, so it will not
+disturb anything already on the instance and `DROP SCHEMA kerbside_finance
+CASCADE` removes every trace of it.
 
-The logic was verified before it was written down: the settlement
-reconciliation and the shape of the February anomaly were both run and checked.
-It has not been executed against a live MySQL engine, so treat the first run as
-the real test. The two checks at the end of `01-schema-and-data.sql` will tell
-you immediately if anything is off.
+The generation logic and the figures quoted above were run and checked before
+being written down, including a week-boundary bug that put Monday's orders in
+the previous week's settlement. The Postgres syntax itself has not been
+executed against a live engine, so treat the first run as the real test: the
+two checks at the end of `01-schema-and-data.sql` report immediately if
+anything is off.
