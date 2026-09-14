@@ -326,32 +326,48 @@ orders and not an adjustment someone posted".
 
 Prepare the backup ahead of the session rather than on camera.
 
-| Seg | Capture | Doing |
-|---|---|---|
-| R1 | pgAdmin, against production | Run the auditor's question. No rows. |
-| R2 | Clumio console | The archived backup |
-| R3 | Clumio query editor | Query 1: the four February payouts |
-| R4 | Results | The 10 February row against the weeks either side |
-| R5 | Clumio query editor | Query 3: the same week by day |
-| R6 | Clumio query editor | Query 2: the refunds itemised |
-| R7 | Export | Download as CSV, open it |
+The whole segment is text in grids. It has no dashboard going red and no
+four-second poll bringing it back, so it cannot be carried the way clips 1 and
+2 are. What it has instead is an escalation: production cannot answer, the
+archive can, and then the archive answers something harder. Shoot it in that
+order and it builds. Shoot it as "here is a query tool" and it dies.
+
+| Seg | Capture | Doing | Rows |
+|---|---|---|---|
+| R1 | pgAdmin, against production | The auditor's question | 0 |
+| R2 | Clumio console | The archived backup | — |
+| R3 | Clumio query editor | Query 1: the four February payouts | 4 |
+| R4 | Clumio query editor | Query 3: the same week by day | 7 |
+| R5 | Clumio query editor | Query 4: the baskets behind the cancellations | 9 |
+| R6 | Clumio query editor | Query 2: the refunds itemised | 27 |
+| R7 | Export | Download as CSV, open it | — |
 
 **Narration**
 
 - R1: "This is the live database. The question is about February last year, and
   retention took that out months ago. There is nothing to query."
 - R2: "The archive has it."
-- R3: "I am not restoring anything. I am running SQL against the backup."
-- R4: "Two hundred and sixty-seven pounds, against nine hundred and eighty-four
-  the week before. And look at the order count — thirty-nine. It was their
-  busiest week of the month."
-- R5: "There it is. Wednesday to Saturday, every order refunded in full. They
+- R3: "I am not restoring anything. I am running SQL against the backup. Two
+  hundred and sixty-seven pounds, against nine hundred and eighty-four the week
+  before. And look at the order count — thirty-nine. It was their busiest week
+  of the month."
+- R4: "There it is. Wednesday to Saturday, every order refunded in full. They
   lost refrigeration and nobody took the storefront offline, so orders kept
   coming in and kept getting cancelled."
+- R5: This is the one for the engineers in the room. "That is a join, into two
+  million order lines, inside a backup. I am not searching an index of
+  filenames. It is SQL, and the data is still the shape the application wrote
+  it in." Say the row count of `order_items` out loud.
 - R6: "Twenty-five orders, nine hundred and thirty-five pounds."
 - R7: "That CSV goes back to their accountant. No restore, no second copy of
   two hundred and forty-nine other restaurants' financial data sitting around
   while we looked."
+
+**Where the argument actually lands**
+
+R4 wins the room and R5 wins the follow-up questions. If you have to cut, cut
+R6: the itemised list is the artefact you export, not the thing that persuades
+anyone, and R7 shows it anyway.
 
 **Traps**
 
